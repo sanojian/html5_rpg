@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+    <head>
+		<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+		<title>tinyMMO</title>
+		<script type="text/javascript" src="./includes/crafty.js"></script>
+		<script type="text/javascript" src="./includes/raphael2.js"></script>
+		<script type="text/javascript" src="./includes/jQuery.js"></script>
+		<!--link href='//fonts.googleapis.com/css?family=Gorditas' rel='stylesheet' type='text/css'-->
+		<style>
+			body, html { margin:0; padding: 0; overflow:hidden; font-family:Arial; font-size:20px }
+			#cr-stage { border:2px solid black; margin:5px auto; color:white }
+		</style>
+        
+        <script language="javascript">
+"use strict";
+
+
+var RENDERING_MODE = 'DOM';
+var GAME_FONT = '"Arial"';//"Gorditas", cursive';
+var VIEW_WIDTH = 1024;
+var VIEW_HEIGHT = 768;
+var TILE_SIZE = 32;
+
+var GAME_CONSTANTS = {
+	MSG_GET_ID: 0,
+	MSG_PLAYER_INFO: 1,
+	MSG_DISCONNECT: 2,
+	MSG_SPEECH: 3,
+	MSG_POSITION: 4,
+	
+	IMAGE_PLAYER: 0,
+	IMAGE_MOB: 1
+}
+
+var g_players = [];
+var g_playerInfo = {};
+
+var g_hud = {
+	speechBoxes: [],
+	cursorSpeechBox: 0
+};
+	
+var g_socket;
+	
+	
+// Initialize everything when the window finishes loading
+window.addEventListener("load", function(event) {
+
+	Crafty.init(VIEW_WIDTH, VIEW_HEIGHT);
+	doCraftyInitialization();
+
+	// HUD
+	var pos = jQuery("#cr-stage").aPosition();
+	jQuery("#raphHolder").css( { position: "absolute", top: pos.top, left: pos.left, 
+		height: jQuery("#cr-stage").height()+2, width: jQuery("#cr-stage").width()+2, "z-index": 1000 });
+	g_hud.raphPaper = Raphael("raphHolder");
+	
+	for (var i=0;i<10;i++) {
+		var set = g_hud.raphPaper.set();
+		set.push(g_hud.raphPaper.rect(-100,-100,100,100,6).attr( { fill: '#fff', 'stroke-width': 4 } ));
+		set.push(g_hud.raphPaper.text(-100,-100,'test').attr( { font: GAME_FONT, 'font-size': '14pt' }));
+		
+		g_hud.speechBoxes.push(set);
+	}
+	
+	
+	var status = document.getElementById("status");
+	var url = document.getElementById("url");
+	var open = document.getElementById("open");
+	var close = document.getElementById("close");
+	var send = document.getElementById("send");
+	var text = document.getElementById("text");
+	var message = document.getElementById("message");
+
+	status.textContent = "Not Connected";
+	url.value = "ws://localhost:8080";
+	close.disabled = true;
+	send.disabled = true;
+
+	// Create a new connection when the Connect button is clicked
+	open.addEventListener("click", function(event) {
+		open.disabled = true;
+		g_socket = new WebSocket(url.value, "game-protocol");
+
+        g_socket.addEventListener("open", function(event) {
+			close.disabled = false;
+			send.disabled = false;
+			status.textContent = "Connected";
+        });
+
+        // Display messages received from the server
+        g_socket.addEventListener("message", function(event) {
+			console.log("Server Says: " + event.data);
+			message.textContent = "Server Says: " + event.data;
+
+			var parts = event.data.split('|');
+			var type = parts[0];
+			var from = parts[1];
+			if (type == GAME_CONSTANTS.MSG_GET_ID) {
+				g_playerInfo.id = parts[2]
+				var player = Crafty.e('2D, ' + RENDERING_MODE + ', Player, myguy, Multiway')
+					.attr( { x: 200, y: 200, z: 100 } )
+					.multiway(2, {W: -90, S: 90, D: 0, A: 180})
+					.Player();
+
+				g_players[g_playerInfo.id] = { id: msg, name: 'dunno', entity: player };
+				console.log('added me...');
+					
+			}
+			else if (type == GAME_CONSTANTS.MSG_PLAYER_INFO) {
+				if (from != g_playerInfo.id) {
+					var x = parseFloat(parts[2]);
+					var y = parseFloat(parts[3]);
+					var dir = { x: parseFloat(parts[4]), y: parseFloat(parts[5]) };
+					var imgType = parseInt(parts[6])
+					
+					var mob = Crafty.e('2D, ' + RENDERING_MODE + ', MOB, ' + (imgType == GAME_CONSTANTS.IMAGE_PLAYER ? 'otherguy' : 'mobguy'))
+						.attr( { x: x, y: y, z: 100 } )
+						.MOB();
+					mob.trigger('NewDirection', dir);
+					g_players[from] = { id: from, entity: mob };
+					console.log('added someone else...');
+				}
+			}
+			else if (type == GAME_CONSTANTS.MSG_SPEECH) {
+				var msg = parts[2];
+				g_players[from].entity.showSpeech(msg);
+			}
+			else if (type == GAME_CONSTANTS.MSG_POSITION) {
+				if (from != g_playerInfo.id) {
+					var x = parseFloat(parts[2]);
+					var y = parseFloat(parts[3]);
+					var dir = { x: parseFloat(parts[4]), y: parseFloat(parts[5]) };
+					var speed = parseFloat(parts[6]);
+					
+					g_players[from].entity.attr( { x: x, y: y, speed: speed } );
+					g_players[from].entity.trigger('NewDirection', dir);
+				}
+			}
+        });
+
+        // Display any errors that occur
+        g_socket.addEventListener("error", function(event) {
+          message.textContent = "Error: " + event;
+        });
+
+        g_socket.addEventListener("close", function(event) {
+          open.disabled = false;
+          status.textContent = "Not Connected";
+        });
+      });
+
+      // Close the connection when the Disconnect button is clicked
+      close.addEventListener("click", function(event) {
+        close.disabled = true;
+        send.disabled = true;
+        message.textContent = "";
+        g_socket.close();
+      });
+
+      // Send text to the server when the Send button is clicked
+      send.addEventListener("click", function(event) {
+        g_socket.send('' + GAME_CONSTANTS.MSG_SPEECH + '|' + text.value);
+        text.value = "";
+      });
+});
+
+
+function doCraftyInitialization() {
+
+
+	Crafty.c('Player', {
+
+		Player: function() {
+			this.requires("SpriteAnimation, Grid, Collision")
+			.bind("NewDirection", function (direction) {
+				g_socket.send('' + GAME_CONSTANTS.MSG_POSITION + '|' + this.x + '|' + this.y + '|' + direction.x + '|' + direction.y);
+			})
+			
+			return this;
+		},
+		showSpeech: function(text) {
+			g_hud.cursorSpeechBox = (g_hud.cursorSpeechBox + 1) % g_hud.speechBoxes.length;
+			var speechBox = g_hud.speechBoxes[g_hud.cursorSpeechBox];
+			speechBox[1].attr({ x: this.x + this.w/2, y: this.y - 30, text: text });
+			var bbox = speechBox[1].getBBox();
+			speechBox[0].attr({ x: bbox.x - 10, y: bbox.y - 10, width: bbox.width + 20, height: bbox.height + 20 });
+			speechBox.show();
+			setTimeout(function() { speechBox.hide(); }, 3000);
+			
+		}
+	});
+	
+	Crafty.c('MOB', {
+		speed: 1,
+		direction: { x: 0, y: 0},
+		
+		MOB: function() {
+			this.requires("SpriteAnimation, Grid, Collision")
+			.bind("EnterFrame", function () {
+				if (this.direction.x || this.direction.y)
+					this.attr( { x: this.x + this.direction.x * this.speed, y: this.y + this.direction.y * this.speed } );
+			})
+			.bind("NewDirection", function (newDirection) {
+				this.direction = newDirection;
+			})
+			
+			return this;
+		},
+		showSpeech: function(text) {
+			g_hud.cursorSpeechBox = (g_hud.cursorSpeechBox + 1) % g_hud.speechBoxes.length;
+			var speechBox = g_hud.speechBoxes[g_hud.cursorSpeechBox];
+			speechBox[1].attr({ x: this.x + this.w/2, y: this.y - 30, text: text });
+			var bbox = speechBox[1].getBBox();
+			speechBox[0].attr({ x: bbox.x - 10, y: bbox.y - 10, width: bbox.width + 20, height: bbox.height + 20 });
+			speechBox.show();
+			setTimeout(function() { speechBox.hide(); }, 3000);
+			
+		}
+	});
+
+
+	Crafty.scene("main", function () {
+		Crafty.background("#2F8136");		
+	
+	});
+
+	Crafty.scene("loading", function () {
+		Crafty.background("#000");
+		Crafty.e("2D, DOM, Text").attr({ w: 800, h: 20, x: VIEW_WIDTH/2 - 400, y: VIEW_HEIGHT/2-160 })
+			.text("Loading...")
+			.css({ "text-align": "center", "font-family": GAME_FONT, "font-size": "44px" });
+
+		Crafty.load([	'./images/critters.png'], function() {
+			Crafty.sprite(16, "./images/critters.png", {
+				myguy: [0, 0],
+				otherguy: [1, 0],
+				mobguy: [3, 0]
+			});
+		
+			Crafty.scene("main");
+			
+		});
+		
+	});	
+		
+	Crafty.scene("loading");	
+		
+}
+
+// fix for Webkit browsers too fast
+jQuery.fn.aPosition = function() {
+    var thisLeft = this.offset().left;
+    var thisTop = this.offset().top;
+    var thisParent = this.parent();
+
+    var parentLeft = thisParent.offset().left;
+    var parentTop = thisParent.offset().top;
+
+    return {
+        left: thisLeft-parentLeft,
+        top: thisTop-parentTop
+    };
+};
+		</script>
+	</head>
+<body>
+	Status: <span id="status"></span><br />
+	URL: <input id="url" /><br />
+	<input id="open" type="button" value="Connect" />&nbsp;
+	<input id="close" type="button" value="Disconnect" /><br />
+	<input id="send" type="button" value="Send" />&nbsp;
+	<input id="text" /><br />
+	<span id="message"></span>
+
+	<div id="raphHolder" style="pointer-events: none;"></div>
+
+</body>
+</html>

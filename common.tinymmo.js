@@ -1,0 +1,4 @@
+exports.TINYMMO_CONSTANTS = {
+	MSG_GET_ID: 0
+
+};
