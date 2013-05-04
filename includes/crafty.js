@@ -1,10 +1,11 @@
 /*!
-* Crafty v0.5.0
+* Crafty v0.5.3
 * http://craftyjs.com
 *
 * Copyright 2010, Louis Stowasser
 * Dual licensed under the MIT or GPL licenses.
 */
+
 
 (function (window, initComponents, undefined) {
     /**@
@@ -21,7 +22,13 @@
     *    Crafty("Hello, 2D, Component")
     * ~~~
     * 
-    * The first selector will return all entities that has the component `MyComponent`. The second will return all entities that has `Hello` and `2D` and `Component` whereas the last will return all entities that has at least one of those components (or).
+    * The first selector will return all entities that have the component `MyComponent`. The second will return all entities that have `Hello` and `2D` and `Component` whereas the last will return all entities that have at least one of those components (or).
+    *
+    * ~~~
+    *   Crafty("*")
+    * ~~~
+    * Passing `*` will select all entities.
+    *
     * ~~~
     *   Crafty(1)
     * ~~~
@@ -47,6 +54,7 @@
 
     	components = {}; //map of components and their functions
     	entities = {}; //map of entities and their data
+        entityFactories = {}; //templates of entities
     	handlers = {}; //global event handlers
     	onloads = []; //temporary storage of onload handlers
     	tick;
@@ -140,6 +148,11 @@
                 if (comps && and) for (i = 0; i < l; i++) this.extend(components[comps[i]]);
 
                 this.length = elem; //length is the last index (already incremented)
+				
+				// if there's only one entity, return the actual entity
+				if (elem === 1) {
+					return entities[this[elem-1]];
+				}
 
             } else { //Select a specific entity
 
@@ -192,7 +205,7 @@
         * #.addComponent
         * @comp Crafty Core
         * @sign public this .addComponent(String componentList)
-        * @param componentList - A string of components to add seperated by a comma `,`
+        * @param componentList - A string of components to add separated by a comma `,`
         * @sign public this .addComponent(String Component1[, .., String ComponentN])
         * @param Component# - Component ID to add.
         * Adds a component to the selected entities or entity.
@@ -257,15 +270,24 @@
         /**@
         * #.toggleComponent
         * @comp Crafty Core
-        * @sign public this. toggleComponent(String componentID,String componentToggle)
-        * @param componentID - Component ID to add or remove.
-        * @param componentToggle - Component ID to replace instead of remove
-        * Add or Remove Components
+        * @sign public this .toggleComponent(String ComponentList)
+        * @param ComponentList - A string of components to add or remove separated by a comma `,`
+        * @sign public this .toggleComponent(String Component1[, .., String componentN])
+        * @param Component# - Component ID to add or remove.
+        * Add or Remove Components from an entity.
         * 
         * @example
         * ~~~
         * var e = Crafty.e("2D,DOM,Test");
-        * e.toggleComponent("Test,Test2"); //Remove Test add Test2 and vice versa
+        * e.toggleComponent("Test,Test2"); //Remove Test, add Test2
+        * e.toggleComponent("Test,Test2"); //Add Test, remove Test2
+        * ~~~
+        *
+        * ~~~
+        * var e = Crafty.e("2D,DOM,Test");
+        * e.toggleComponent("Test","Test2"); //Remove Test, add Test2
+        * e.toggleComponent("Test","Test2"); //Add Test, remove Test2
+        * e.toggleComponent("Test");         //Remove Test
         * ~~~
         */
        toggleComponent:function(toggle){
@@ -339,6 +361,13 @@
         * Removes a component from an entity. A soft remove (the default) will only
         * refrain `.has()` from returning true. Hard will remove all
         * associated properties and methods.
+        *
+        * @example
+        * ~~~
+        * var e = Crafty.e("2D,DOM,Test");
+        * e.removeComponent("Test");        //Soft remove Test component
+        * e.removeComponent("Test", false); //Hard remove Test component
+        * ~~~
         */
         removeComponent: function (id, soft) {
             if (soft === false) {
@@ -513,7 +542,7 @@
         * @param callback - Function to unbind
         * Removes binding with an event from current entity.
         *
-        * Passing an event name will remove all events binded to
+        * Passing an event name will remove all events bound to
         * that event. Passing a reference to the callback will
         * unbind only that callback.
         * @see .bind, .trigger
@@ -747,15 +776,15 @@
         * #.getVersion
         * @comp Crafty Core
         * @sign public this .getVersion()
-        * @returns Actualy crafty version
+        * @returns Actually crafty version
         *
         * @example
         * ~~~
-        * Crafty.getVersion(); //'0.5.0'
+        * Crafty.getVersion(); //'0.5.2'
         * ~~~
         */
         getVersion: function () {
-            return '0.5.0';
+            return '0.5.3';
         },
 
         /**@
@@ -782,6 +811,8 @@
         		initComponents(Crafty, window, window.document);
         	}
 
+            Crafty.trigger("CraftyStop");
+
         	return this;
         },
 
@@ -792,7 +823,7 @@
         * @trigger Unpause - when the game is unpaused
         * @sign public this Crafty.pause(void)
         * 
-        * Pauses the game by stoping the EnterFrame event from firing. If the game is already paused it is unpaused.
+        * Pauses the game by stopping the EnterFrame event from firing. If the game is already paused it is unpaused.
         * You can pass a boolean parameter if you want to pause or unpause mo matter what the current state is.
         * Modern browsers pauses the game when the page is not visible to the user. If you want the Pause event
         * to be triggered when that happens you can enable autoPause in `Crafty.settings`.
@@ -809,14 +840,12 @@
             if (arguments.length == 1 ? toggle : !this._paused) {
                 this.trigger('Pause');
                 this._paused = true;
-
-                Crafty.timer.stop();
+                setTimeout(function(){ Crafty.timer.stop(); }, 0);
                 Crafty.keydown = {};
             } else {
                 this.trigger('Unpause');
                 this._paused = false;
-
-                Crafty.timer.init();
+                setTimeout(function(){ Crafty.timer.init(); }, 0);
             }
             return this;
         },
@@ -845,8 +874,9 @@
         timer: {
             prev: (+new Date),
             current: (+new Date),
-            curTime: Date.now(),
-
+            currentTime: +new Date(),
+            frames:0,
+            frameTime:0,
             init: function () {
                 var onFrame = window.requestAnimationFrame ||
                     window.webkitRequestAnimationFrame ||
@@ -869,7 +899,7 @@
             },
 
             stop: function () {
-                Crafty.trigger("CraftyStop");
+                Crafty.trigger("CraftyStopTimer");
 
                 if (typeof tick === "number") clearInterval(tick);
 
@@ -892,11 +922,11 @@
             */
             step: function () {
                 loops = 0;
-                this.curTime = Date.now();
-                if (this.curTime - nextGameTick > 60 * milliSecPerFrame) {
-                    nextGameTick = this.curTime - milliSecPerFrame;
+                this.currentTime = +new Date();
+                if (this.currentTime - nextGameTick > 60 * milliSecPerFrame) {
+                    nextGameTick = this.currentTime - milliSecPerFrame;
                 }
-                while (this.curTime > nextGameTick) {
+                while (this.currentTime > nextGameTick) {
                     Crafty.trigger("EnterFrame", { frame: frame++ });
                     nextGameTick += milliSecPerFrame;
                     loops++;
@@ -904,6 +934,14 @@
                 if (loops) {
                     Crafty.DrawManager.draw();
                 }
+               if(this.currentTime > this.frameTime){
+                    Crafty.trigger("MessureFPS",{value:this.frame});
+                    this.frame = 0;
+                    this.frameTime = this.currentTime + 1000;
+                }else{
+                    this.frame++;
+                }
+            
             },
             /**@
             * #Crafty.timer.getFPS
@@ -929,6 +967,69 @@
                 Crafty.DrawManager.draw();
             }
 
+        },
+
+        /**@
+        * #Crafty.addEntityFactory
+        * @category Core
+        * @param name - Name of the entity factory.
+        * @param callback - Function containing the entity creation procedure.
+        * 
+        * Registers an Entity Factory.  An Entity Factory allows for the repeatable creation of an Entity.
+        *
+        * @example
+        * ~~~
+        * Crafty.addEntityFactory('Projectile', function() {
+        *   var entity = Crafty.e('2D, Canvas, Color, Physics, Collision')
+        *   .color("red")
+        *   .attr({
+        *     w: 3,
+        *     h: 3,
+        *     x: this.x,
+        *     y: this.y
+        *   })
+        *   .addComponent('Gravity').gravity("Floor");
+        *   
+        *   return entity;
+        * });
+        * ~~~
+        * 
+        * @see Crafty.e
+        */
+        addEntityFactory: function(name, callback) {
+            this.entityFactories[name] = callback;
+        },
+
+        /**@
+        * #Crafty.newFactoryEntity
+        * @category Core
+        * @param name - Name of the entity factory.
+        * 
+        * Creates a new entity based on a specific Entity Factory.
+        *
+        * @example
+        * ~~~
+        * Crafty.addEntityFactory('Projectile', function() {
+        *   var entity = Crafty.e('2D, Canvas, Color, Physics, Collision')
+        *   .color("red")
+        *   .attr({
+        *     w: 3,
+        *     h: 3,
+        *     x: this.x,
+        *     y: this.y
+        *   })
+        *   .addComponent('Gravity').gravity("Floor");
+        *   
+        *   return entity;
+        * });
+        *
+        * Crafty.newFactoryEntity('Projectile'); // This returns a new Projectile Entity.
+        * ~~~
+        * 
+        * @see Crafty.e
+        */
+        newFactoryEntity: function(name) {
+            return this.entityTemplates[name]();
         },
 
         /**@
@@ -984,8 +1085,6 @@
         * - Properties or methods that start with an underscore are considered private.
         * - A method called `init` will automatically be called as soon as the
         * component is added to an entity.
-        * - A methid called `uninit` will be called when the component is removed from an entity. 
-        * A sample use case for this is the native DOM component that removes its div element wehen removed from an entity.
         * - A method with the same name as the component is considered to be a constructor
         * and is generally used when you need to pass configuration data to the component on a per entity basis.
         *
@@ -1001,7 +1100,21 @@
         *
         * Crafty.e("Annoying").annoying("I'm an orange...");
         * ~~~
+        *
         * 
+        * WARNING: 
+        *
+        * in the example above the field _message is local to the entity. That is, if you create many entities with the Annoying component they can all have different values for _message. That is because it is a simple value, and simple values are copied by value. If however the field had been an object or array, the value would have been shared by all entities with the component because complex types are copied by reference in javascript. This is probably not what you want and the following example demonstrates how to work around it:
+        *
+        * ~~~
+        * Crafty.c("MyComponent", {
+        *     _iAmShared: { a: 3, b: 4 },
+        *     init: function() {
+        *         this._iAmNotShared = { a: 3, b: 4 };
+        *     },
+        * });
+        * ~~~
+        *
         * @see Crafty.e
         */
         c: function (compName, component) {
@@ -1231,10 +1344,16 @@
 
     //make Crafty global
     window.Crafty = Crafty;
+
+    if (typeof define === 'function') {
+        define('crafty', [], function() { return Crafty; });
+    }
 })(window,
+
 
 //wrap around components
 function(Crafty, window, document) {
+
 
 /**
 * Spatial HashMap for broad phase collision
@@ -1269,7 +1388,7 @@ function(Crafty, window, document) {
     * @sign public Object Crafty.map.insert(Object obj)
 	* @param obj - An entity to be inserted.
 	* 
-    * `obj` is instered in '.map' of the corresponding broad phase cells. An object of the following fields is returned.
+    * `obj` is inserted in '.map' of the corresponding broad phase cells. An object of the following fields is returned.
     * ~~~
     * - the object that keep track of cells (keys)
     * - `obj`
@@ -1305,7 +1424,7 @@ function(Crafty, window, document) {
 	* 
     * - If `filter` is `false`, just search for all the entries in the give `rect` region by broad phase collision. Entity may be returned duplicated.
     * - If `filter` is `true`, filter the above results by checking that they actually overlap `rect`.
-    * The easier usage is with `filter`=`true`. For performance reason, you may use `filter`=`false`, and filter the result youself. See examples in drawing.js and collision.js
+    * The easier usage is with `filter`=`true`. For performance reason, you may use `filter`=`false`, and filter the result yourself. See examples in drawing.js and collision.js
 	*/
 		search: function (rect, filter) {
 			var keys = HashMap.key(rect),
@@ -1530,10 +1649,11 @@ function(Crafty, window, document) {
 	parent.HashMap = HashMap;
 })(Crafty);
 
+
 /**@
 * #Crafty.map
 * @category 2D
-* Functions related with quering entities. 
+* Functions related with querying entities.
 * @see Crafty.HashMap
 */
 Crafty.map = new Crafty.HashMap();
@@ -1749,7 +1869,7 @@ Crafty.c("2D", {
 					//update the MBR
 					var mbr = this._mbr, moved = false;
 					// If the browser doesn't have getters or setters,
-					// {x, y, w, h, z} and {_x, _y, _w, _h, _z} may be out of synce,
+					// {x, y, w, h, z} and {_x, _y, _w, _h, _z} may be out of sync,
 					// in which case t checks if they are different on tick and executes the Change event.
 					if (mbr) { //check each value to see which has changed
 						if (this.x !== this._x) { mbr._x -= this.x - this._x; moved = true; }
@@ -1827,6 +1947,10 @@ Crafty.c("2D", {
 				}
 				this._children = [];
 			}
+			
+			if (this._parent) {
+				this._parent.detach(this);
+			}
 
 			Crafty.map.remove(this);
 
@@ -1861,10 +1985,10 @@ Crafty.c("2D", {
 			y2 = o.y - (this._x + this._w - o.x) * st + (this._y + this._h - o.y) * ct,
 			x3 = o.x + (this._x - o.x) * ct + (this._y + this._h - o.y) * st,
 			y3 = o.y - (this._x - o.x) * st + (this._y + this._h - o.y) * ct,
-			minx = Math.floor(Math.min(x0, x1, x2, x3)),
-			miny = Math.floor(Math.min(y0, y1, y2, y3)),
-			maxx = Math.ceil(Math.max(x0, x1, x2, x3)),
-			maxy = Math.ceil(Math.max(y0, y1, y2, y3));
+			minx = Math.round(Math.min(x0, x1, x2, x3)),
+			miny = Math.round(Math.min(y0, y1, y2, y3)),
+			maxx = Math.round(Math.max(x0, x1, x2, x3)),
+			maxy = Math.round(Math.max(y0, y1, y2, y3));
 
 		this._mbr = { _x: minx, _y: miny, _w: maxx - minx, _h: maxy - miny };
 
@@ -2094,7 +2218,8 @@ Crafty.c("2D", {
 	* @sign public this .attach(Entity obj[, .., Entity objN])
 	* @param obj - Entity(s) to attach
 	* Attaches an entities position and rotation to current entity. When the current entity moves,
-	* the attached entity will move by the same amount.
+	* the attached entity will move by the same amount. Attached entities stored in _children array,
+	* the parent object is stored in _parent on the child entities.
 	*
 	* As many objects as wanted can be attached and a hierarchy of objects is possible by attaching.
 	*/
@@ -2148,7 +2273,7 @@ Crafty.c("2D", {
 	* @sign public this .origin(String offset)
 	* @param offset - Combination of center, top, bottom, middle, left and right
 	* Set the origin point of an entity for it to rotate around.
-	* 
+	*
 	* @example
 	* ~~~
 	* this.origin("top left")
@@ -2156,7 +2281,7 @@ Crafty.c("2D", {
 	* this.origin("bottom right")
 	* this.origin("middle right")
 	* ~~~
-	* 
+	*
 	* @see .rotation
 	*/
 	origin: function (x, y) {
@@ -2189,9 +2314,9 @@ Crafty.c("2D", {
 	* @trigger Change - when the entity has flipped
 	* @sign public this .flip(String dir)
 	* @param dir - Flip direction
-	* 
+	*
 	* Flip entity on passed direction
-	* 
+	*
 	* @example
 	* ~~~
 	* this.flip("X")
@@ -2204,16 +2329,16 @@ Crafty.c("2D", {
                     this.trigger("Change");
                 }
 	},
-        
+
         /**@
 	* #.unflip
 	* @comp 2D
 	* @trigger Change - when the entity has unflipped
 	* @sign public this .unflip(String dir)
 	* @param dir - Unflip direction
-	* 
+	*
 	* Unflip entity on passed direction (if it's flipped)
-	* 
+	*
 	* @example
 	* ~~~
 	* this.unflip("X")
@@ -2254,7 +2379,7 @@ Crafty.c("2D", {
 		if (name === '_rotation') {
 			this._rotate(value);
 			this.trigger("Rotate");
-			//set the global Z and trigger reorder just incase
+			//set the global Z and trigger reorder just in case
 		} else if (name === '_z') {
 			this._globalZ = parseInt(value + Crafty.zeroFill(this[0], 5), 10); //magic number 10e5 is the max num of entities
 			this.trigger("reorder");
@@ -2306,12 +2431,12 @@ Crafty.c("Gravity", {
 	* @comp Gravity
 	* @sign public this .gravity([comp])
 	* @param comp - The name of a component that will stop this entity from falling
-	* 
-	* Enable gravity for this entity no matter whether comp parameter is not specified, 
+	*
+	* Enable gravity for this entity no matter whether comp parameter is not specified,
 	* If comp parameter is specified all entities with that component will stop this entity from falling.
 	* For a player entity in a platform game this would be a component that is added to all entities
 	* that the player should be able to walk on.
-	* 
+	*
 	* @example
 	* ~~~
 	* Crafty.e("2D, DOM, Color, Gravity")
@@ -2333,9 +2458,9 @@ Crafty.c("Gravity", {
 	* @comp Gravity
 	* @sign public this .gravityConst(g)
 	* @param g - gravitational constant
-	* 
+	*
 	* Set the gravitational constant to g. The default is .2. The greater g, the faster the object falls.
-	* 
+	*
 	* @example
 	* ~~~
 	* Crafty.e("2D, DOM, Color, Gravity")
@@ -2413,7 +2538,7 @@ Crafty.c("Gravity", {
 /**@
 * #Crafty.polygon
 * @category 2D
-* 
+*
 * Polygon object used for hitboxes and click maps. Must pass an Array for each point as an
 * argument where index 0 is the x position and index 1 is the y position.
 *
@@ -2445,9 +2570,9 @@ Crafty.polygon.prototype = {
 	* @sign public Boolean .containsPoint(Number x, Number y)
 	* @param x - X position of the point
 	* @param y - Y position of the point
-	* 
+	*
 	* Method is used to determine if a given point is contained by the polygon.
-	* 
+	*
 	* @example
 	* ~~~
 	* var poly = new Crafty.polygon([50,0],[100,100],[0,100]);
@@ -2473,9 +2598,9 @@ Crafty.polygon.prototype = {
 	* @sign public void .shift(Number x, Number y)
 	* @param x - Amount to shift the `x` axis
 	* @param y - Amount to shift the `y` axis
-	* 
+	*
 	* Shifts every single point in the polygon by the specified amount.
-	* 
+	*
 	* @example
 	* ~~~
 	* var poly = new Crafty.polygon([50,0],[100,100],[0,100]);
@@ -2526,18 +2651,18 @@ Crafty.polygon.prototype = {
 * (don't include the absolute values as it will automatically calculate this).
 */
 Crafty.circle = function (x, y, radius) {
-	this.x = x;
-	this.y = y;
-	this.radius = radius;
+    this.x = x;
+    this.y = y;
+    this.radius = radius;
 
-	// Creates an octogon that aproximate the circle for backward compatibility.
-	this.points = [];
-	var theta;
+    // Creates an octagon that approximate the circle for backward compatibility.
+    this.points = [];
+    var theta;
 
-	for (var i = 0; i < 8; i++) {
-		theta = i * Math.PI / 4;
-		this.points[i] = [Math.sin(theta) * radius, Math.cos(theta) * radius];
-	}
+    for (var i = 0; i < 8; i++) {
+        theta = i * Math.PI / 4;
+        this.points[i] = [this.x + (Math.sin(theta) * radius), this.y + (Math.cos(theta) * radius)];
+    }
 };
 
 Crafty.circle.prototype = {
@@ -2547,9 +2672,9 @@ Crafty.circle.prototype = {
 	* @sign public Boolean .containsPoint(Number x, Number y)
 	* @param x - X position of the point
 	* @param y - Y position of the point
-	* 
+	*
 	* Method is used to determine if a given point is contained by the circle.
-	* 
+	*
 	* @example
 	* ~~~
 	* var circle = new Crafty.circle(0, 0, 10);
@@ -2572,9 +2697,9 @@ Crafty.circle.prototype = {
 	* @sign public void .shift(Number x, Number y)
 	* @param x - Amount to shift the `x` axis
 	* @param y - Amount to shift the `y` axis
-	* 
+	*
 	* Shifts the circle by the specified amount.
-	* 
+	*
 	* @example
 	* ~~~
 	* var poly = new Crafty.circle(0, 0, 10);
@@ -2634,6 +2759,7 @@ Crafty.matrix.prototype = {
 	}
 }
 
+
 /**@
 * #Collision
 * @category 2D
@@ -2644,6 +2770,15 @@ Crafty.c("Collision", {
      * #.init
      * @comp Collision
      * Create a rectangle polygon based on the x, y, w, h dimensions.
+     *
+     * You must ensure that the x, y, w, h properties are set before the init function is called. If you have a Car component that sets these properties you should create your entity like this
+     * ~~~
+     * Crafty.e('2D, DOM, Car, Collision');
+     * ~~~
+     * And not like
+     * ~~~
+     * Crafty.e('2D, DOM, Collision, Car');
+     * ~~~
      */
     init: function () {
         this.requires("2D");
@@ -2655,7 +2790,7 @@ Crafty.c("Collision", {
         this.map.shift(area._x, area._y);
     },
 
-	/**@
+    /**@
 	* #.collision
 	* @comp Collision
 	* 
@@ -2669,6 +2804,8 @@ Crafty.c("Collision", {
 	*
 	* The hit area (polygon) must be a convex shape and not concave
 	* for the collision detection to work.
+    *
+    * If no hit area is specified x, y, w, h properties of the entity will be used.
 	* 
 	* @example
 	* ~~~
@@ -2681,13 +2818,13 @@ Crafty.c("Collision", {
 	* 
 	* @see Crafty.polygon
 	*/
-	collision: function (poly) {
-		var area = this._mbr || this;
+    collision: function (poly) {
+        var area = this._mbr || this;
 
-		if (!poly) {
-			return this;
-		}
-        
+        if (!poly) {
+            poly = new Crafty.polygon([0, 0], [area._w, 0], [area._w, area._h], [0, area._h]);
+        }
+
         if (arguments.length > 1) {
             //convert args to array to create polygon
             var args = Array.prototype.slice.call(arguments, 0);
@@ -2932,6 +3069,7 @@ Crafty.c("Collision", {
 });
 
 
+
 /**@
 * #.WiredHitBox
 * @comp Collision
@@ -3029,6 +3167,7 @@ Crafty.c("SolidHitBox", {
 		return this;
 	}
 });
+
 /**@
 * #DOM
 * @category Graphics
@@ -3420,6 +3559,30 @@ Crafty.extend({
 	}
 });
 
+
+  /**@
+    * #FPS
+    * @category Core
+    * @trigger MessureFPS - each second
+    * Component to last X FPS Messurements
+    * @example
+    * 
+    * Crafty.e("2D,DOM,FPS,Text").attr({maxValues:10}).bind("MessureFPS",function(fps){
+    *   this.text("FPS"+fps.value); //Display Current FPS
+    *   console.log(this.values); // Display last x Values
+    * })
+    */
+  Crafty.c("FPS",{
+         values:[],
+         maxValues:60,
+        init:function(){
+            this.bind("MessureFPS",function(fps){
+                if(this.values.length > this.maxValues) this.values.splice(0,1);
+                this.values.push(fps.value);
+             });
+        }
+    });
+
 /**@
 * #HTML
 * @category Graphics
@@ -3498,6 +3661,7 @@ Crafty.c("HTML", {
 		return this;
 	}
 });
+
 /**@
  * #Storage
  * @category Utilities
@@ -3622,7 +3786,7 @@ Crafty.c("HTML", {
 	 * 
 	 * Handlers for processing any data that needs more than straight assignment
 	 *
-	 * Note that data stord in the .attr object is automatically added to the entity.
+	 * Note that data stored in the .attr object is automatically added to the entity.
 	 * It does not need to be handled here
 	 *
 	 * @example
@@ -3635,7 +3799,8 @@ Crafty.c("HTML", {
 	 */
 
 Crafty.storage = (function () {
-	var db = null, url, gameName, timestamps = {};
+	var db = null, url, gameName, timestamps = {}, 
+		transactionType = { READ: "readonly", READ_WRITE: "readwrite" };
 
 	/*
 	 * Processes a retrieved object.
@@ -3755,12 +3920,15 @@ Crafty.storage = (function () {
 
 	// everyone names their object different. Fix that nonsense.
 	if (typeof indexedDB != 'object') {
-		if (typeof mozIndexedDB == 'object') {
-			window.indexedDB = mozIndexedDB;
-		}
-		if (typeof webkitIndexedDB == 'object') {
-			window.indexedDB = webkitIndexedDB;
-			window.IDBTransaction = webkitIDBTransaction;
+		window.indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
+		window.IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction;
+		
+		/* Numeric constants for transaction type are deprecated
+		 * Ensure that the script will work consistenly for recent and legacy browser versions
+		 */
+		if (typeof IDBTransaction == 'object') {
+			transactionType.READ = IDBTransaction.READ || IDBTransaction.readonly || transactionType.READ;
+			transactionType.READ_WRITE = IDBTransaction.READ_WRITE || IDBTransaction.readwrite || transactionType.READ_WRITE;
 		}
 	}
 
@@ -3782,7 +3950,7 @@ Crafty.storage = (function () {
 					stores.push('cache');
 				}
 				if (db == null) {
-					var request = indexedDB.open(gameName, "Database for " + gameName);
+					var request = indexedDB.open(gameName);
 					request.onsuccess = function (e) {
 						db = e.target.result;
 						createStores();
@@ -3799,7 +3967,7 @@ Crafty.storage = (function () {
 				// get all the timestamps for existing keys
 				function getTimestamps() {
 					try {
-						var trans = db.transaction(['save'], IDBTransaction.READ),
+						var trans = db.transaction(['save'], transactionType.READ),
 						store = trans.objectStore('save'),
 						request = store.getAll();
 						request.onsuccess = function (e) {
@@ -3834,7 +4002,7 @@ Crafty.storage = (function () {
 				var str = serialize(data), t = ts();
 				if (type == 'save')	saveExternal(key, str, t);
 				try {
-					var trans = db.transaction([type], IDBTransaction.READ_WRITE),
+					var trans = db.transaction([type], transactionType.READ_WRITE),
 					store = trans.objectStore(type),
 					request = store.put({
 						"data": str,
@@ -3853,7 +4021,7 @@ Crafty.storage = (function () {
 					return;
 				}
 				try {
-					var trans = db.transaction([type], IDBTransaction.READ),
+					var trans = db.transaction([type], transactionType.READ),
 					store = trans.objectStore(type),
 					request = store.get(key);
 					request.onsuccess = function (e) {
@@ -3870,7 +4038,7 @@ Crafty.storage = (function () {
 					setTimeout(function () { Crafty.storage.getAllkeys(type, callback); }, 1);
 				}
 				try {
-					var trans = db.transaction([type], IDBTransaction.READ),
+					var trans = db.transaction([type], transactionType.READ),
 					store = trans.objectStore(type),
 					request = store.getCursor(),
 					res = [];
@@ -4089,6 +4257,7 @@ Crafty.storage = (function () {
 		},
 	}*/
 })();
+
 /**@
 * #Crafty.support
 * @category Misc, Core
@@ -4112,7 +4281,7 @@ Crafty.storage = (function () {
     * 
     * If Crafty.mobile is equal true Crafty does some things under hood:
     * ~~~
-    * - set viewport on max device width and heigh
+    * - set viewport on max device width and height
     * - set Crafty.stage.fullscreen on true
     * - hide window scrollbars
     * ~~~
@@ -4190,8 +4359,8 @@ Crafty.storage = (function () {
         var gl;
         try {
             gl = document.createElement("canvas").getContext("experimental-webgl");
-            gl.viewportWidth = canvas.width;
-            gl.viewportHeight = canvas.height;
+            gl.viewportWidth = support.canvas.width;
+            gl.viewportHeight = support.canvas.height;
         }
         catch (e) { }
         support.webgl = !!gl;
@@ -4239,8 +4408,8 @@ Crafty.extend({
     * @param tile - Tile size of the sprite map, defaults to 1
     * @param url - URL of the sprite image
     * @param map - Object where the key is what becomes a new component and the value points to a position on the sprite map
-    * @param paddingX - Horizontal space inbetween tiles. Defaults to 0.
-    * @param paddingY - Vertical space inbetween tiles. Defaults to paddingX.
+    * @param paddingX - Horizontal space in between tiles. Defaults to 0.
+    * @param paddingY - Vertical space in between tiles. Defaults to paddingX.
     * Generates components based on positions in a sprite image to be applied to entities.
     *
     * Accepts a tile size, URL and map for the name of the sprite and it's position.
@@ -4410,7 +4579,7 @@ Crafty.extend({
             obj = window.document;
         }
 
-        //retrieve anonymouse function
+        //retrieve anonymous function
         var id = ctx[0] || "",
             afn = this._events[id + obj + type + callback];
 
@@ -4479,6 +4648,16 @@ Crafty.extend({
         * simply add `Crafty.viewport.y` onto the entities `y` position.
         */
         _y: 0,
+		
+		/**@
+         * #Crafty.viewport.bounds
+         * @comp Crafty.viewport
+         *
+		 * A rectangle which defines the bounds of the viewport. If this 
+		 * variable is null, Crafty uses the bounding box of all the items
+		 * on the stage.
+         */
+        bounds:null,
 
         /**@
          * #Crafty.viewport.scroll
@@ -4578,7 +4757,7 @@ Crafty.extend({
          * @sign public void Crafty.viewport.follow(Object target, Number offsetx, Number offsety)
          * @param Object target - An entity with the 2D component
          * @param Number offsetx - Follow target should be offsetx pixels away from center
-         * @param Number offsety - Positive puts targ to the right of center
+         * @param Number offsety - Positive puts target to the right of center
          *
          * Follows a given entity with the 2D component. If following target will take a portion of
          * the viewport out of bounds of the world, following will stop until the target moves away.
@@ -4703,7 +4882,7 @@ Crafty.extend({
             }
 
             return function (amt, cent_x, cent_y, time) {
-                var bounds = Crafty.map.boundaries(),
+                var bounds = this.bounds || Crafty.map.boundaries(),
                     final_zoom = amt ? zoom * amt : 1;
 				if (!amt) {	// we're resetting to defaults
 					zoom = 1;
@@ -4746,7 +4925,7 @@ Crafty.extend({
             var prop = Crafty.support.prefix + "Transform",
                 act = {};
             return function (amt) {
-                var bounds = Crafty.map.boundaries(),
+                var bounds = this.bounds || Crafty.map.boundaries(),
                     final_zoom = amt ? this._zoom * amt : 1,
 					czoom = final_zoom / this._zoom;
 
@@ -4821,12 +5000,11 @@ Crafty.extend({
                 }
             };
         })(),
-
         _clamp: function () {
             // clamps the viewport to the viewable area
             // under no circumstances should the viewport see something outside the boundary of the 'world'
             if (!this.clampToEntities) return;
-            var bound = Crafty.map.boundaries();
+            var bound = this.bounds || Crafty.map.boundaries();
 			bound.max.x *= this._zoom;
 			bound.min.x *= this._zoom;
 			bound.max.y *= this._zoom;
@@ -4927,7 +5105,7 @@ Crafty.extend({
 
             Crafty.addEvent(this, window, "blur", function () {
                 if (Crafty.settings.get("autoPause")) {
-                    Crafty.pause();
+                    if(!Crafty._paused) Crafty.pause();
                 }
             });
             Crafty.addEvent(this, window, "focus", function () {
@@ -5171,7 +5349,11 @@ Crafty.extend({
     * PLUS: 187,
     * COMMA: 188,
     * MINUS: 189,
-    * PERIOD: 190
+    * PERIOD: 190,
+    * PULT_UP: 29460,
+    * PULT_DOWN: 29461,
+    * PULT_LEFT: 4,
+    * PULT_RIGHT': 5
     * ~~~
     */
     keys: {
@@ -5261,7 +5443,12 @@ Crafty.extend({
         'PLUS': 187,
         'COMMA': 188,
         'MINUS': 189,
-        'PERIOD': 190
+        'PERIOD': 190,
+        'PULT_UP': 29460,
+        'PULT_DOWN': 29461,
+        'PULT_LEFT': 4,
+        'PULT_RIGHT': 5
+
     },
 
     /**@
@@ -5301,6 +5488,7 @@ Crafty.c("viewport", {
         });
     }
 });
+
 
 Crafty.extend({
     /**@
@@ -5457,6 +5645,7 @@ Crafty.extend({
     }
 });
 
+
 /**@
 * #Sprite
 * @category Graphics
@@ -5590,13 +5779,22 @@ Crafty.c("Sprite", {
 	}
 });
 
+
 /**@
 * #Canvas
 * @category Graphics
 * @trigger Draw - when the entity is ready to be drawn to the stage - {type: "canvas", pos, co, ctx}
 * @trigger NoCanvas - if the browser does not support canvas
 * 
-* Draws itself onto a canvas. Crafty.canvas.init() will be automatically called it is not called already (hence the canvas element dosen't exist).
+* When this component is added to an entity it will be drawn to the global canvas element. The canvas element (and hence all Canvas entities) is always rendered below any DOM entities. 
+* 
+* Crafty.canvas.init() will be automatically called if it is not called already to initialize the canvas element.
+*
+* Create a canvas entity like this
+* ~~~
+* var myEntity = Crafty.e("2D, Canvas, Color").color("green")
+*                                             .attr({x: 13, y: 37, w: 42, h: 42});
+*~~~
 */
 Crafty.c("Canvas", {
 
@@ -5630,7 +5828,7 @@ Crafty.c("Canvas", {
 	* @param ctx - Canvas 2D context if drawing on another canvas is required
 	* @param x - X offset for drawing a segment
 	* @param y - Y offset for drawing a segment
-	* @param w - Width of the segement to draw
+	* @param w - Width of the segment to draw
 	* @param h - Height of the segment to draw
 	* 
 	* Method to draw the entity on the canvas element. Can pass rect values for redrawing a segment of the entity.
@@ -5757,6 +5955,7 @@ Crafty.extend({
 		}
 	}
 });
+
 
 Crafty.extend({
 	over: null, //object mouseover, waiting for out
@@ -5945,7 +6144,7 @@ Crafty.extend({
 
         first.target.dispatchEvent(simulatedEvent);
 
-        // trigger click when it shoud be triggered
+        // trigger click when it should be triggered
         if (lastEvent != null && lastEvent.type == 'mousedown' && type == 'mouseup') {
             type = 'click';
 
@@ -5960,14 +6159,15 @@ Crafty.extend({
             first.target.dispatchEvent(simulatedEvent);
         }
 
-        e.preventDefault();
+        if(e.preventDefault) e.preventDefault();
+        else e.returnValue = false;
     },
 
 
 	/**@
 	* #KeyboardEvent
 	* @category Input
-    * Keyboard Event triggerd by Crafty Core
+    * Keyboard Event triggered by Crafty Core
 	* @trigger KeyDown - is triggered for each entity when the DOM 'keydown' event is triggered.
 	* @trigger KeyUp - is triggered for each entity when the DOM 'keyup' event is triggered.
 	* 
@@ -5996,7 +6196,7 @@ Crafty.extend({
 	* #Crafty.eventObject
 	* @category Input
 	* 
-	* Event Object used in Crafty for cross browser compatiblity
+	* Event Object used in Crafty for cross browser compatibility
 	*/
 
 	/**@
@@ -6021,7 +6221,9 @@ Crafty.extend({
 		//Among others this prevent the arrow keys from scrolling the parent page
 		//of an iframe hosting the game
 		if(Crafty.selected && !(e.key == 8 || e.key >= 112 && e.key <= 135)) {
-			e.stopPropagation();
+			if(e.stopPropagation) e.stopPropagation();
+            else e.cancelBubble = true;
+
 			if(e.preventDefault) e.preventDefault();
 			else e.returnValue = false;
 			return false;
@@ -6094,7 +6296,7 @@ Crafty.bind("CraftyStop", function () {
 *      console.log("Clicked!!");
 * })
 *
-* myEntity.bind('Click', function(e) {
+* myEntity.bind('MouseUp', function(e) {
 *    if( e.mouseButton == Crafty.mouseButtons.RIGHT )
 *        console.log("Clicked right button");
 * })
@@ -6166,51 +6368,43 @@ Crafty.c("Draggable", {
 	_ondown: null,
 	_onup: null,
 
-  //Note: the code is note tested with zoom, etc., that may distort the direction between the viewport and the coordinate on the canvas.
+	//Note: the code is note tested with zoom, etc., that may distort the direction between the viewport and the coordinate on the canvas.
 	init: function () {
 		this.requires("Mouse");
+		
 		this._ondrag = function (e) {
-            var pos = Crafty.DOM.translate(e.clientX, e.clientY);
+			var pos = Crafty.DOM.translate(e.clientX, e.clientY);
 
-            // ignore invalid 0 0 position - strange problem on ipad
-            if (pos.x == 0 || pos.y == 0) {
-                return false;
-            }
-
-            if(this._dir) {
-                var len = (pos.x - this._origMouseDOMPos.x) * this._dir.x + (pos.y - this._origMouseDOMPos.y) * this._dir.y;
-                this.x = this._oldX + len * this._dir.x;
-                this.y = this._oldY + len * this._dir.y;
-            } else {
-                this.x = this._oldX + (pos.x - this._origMouseDOMPos.x);
-                this.y = this._oldY + (pos.y - this._origMouseDOMPos.y);
-            }
-
-            this.trigger("Dragging", e);
-        };
+			// ignore invalid 0 0 position - strange problem on ipad
+			if (pos.x == 0 || pos.y == 0) {
+			    return false;
+			}
+	    
+			if(this._dir) {
+			    var len = (pos.x - this._origMouseDOMPos.x) * this._dir.x + (pos.y - this._origMouseDOMPos.y) * this._dir.y;
+			    this.x = this._oldX + len * this._dir.x;
+			    this.y = this._oldY + len * this._dir.y;
+			} else {
+			    this.x = this._oldX + (pos.x - this._origMouseDOMPos.x);
+			    this.y = this._oldY + (pos.y - this._origMouseDOMPos.y);
+			}
+	    
+			this.trigger("Dragging", e);
+		};
 
 		this._ondown = function (e) {
 			if (e.mouseButton !== Crafty.mouseButtons.LEFT) return;
-
-			//start drag
-            this._origMouseDOMPos = Crafty.DOM.translate(e.clientX, e.clientY);
-			this._oldX = this._x;
-			this._oldY = this._y;
-			this._dragging = true;
-
-			Crafty.addEvent(this, Crafty.stage.elem, "mousemove", this._ondrag);
-			Crafty.addEvent(this, Crafty.stage.elem, "mouseup", this._onup);
-			this.trigger("StartDrag", e);
+			this._startDrag(e);
 		};
 
-        this._onup = function upper(e) {
-            if (this._dragging == true) {
-                Crafty.removeEvent(this, Crafty.stage.elem, "mousemove", this._ondrag);
-                Crafty.removeEvent(this, Crafty.stage.elem, "mouseup", this._onup);
-                this._dragging = false;
-                this.trigger("StopDrag", e);
-            }
-        };
+		this._onup = function upper(e) {
+			if (this._dragging == true) {
+			    Crafty.removeEvent(this, Crafty.stage.elem, "mousemove", this._ondrag);
+			    Crafty.removeEvent(this, Crafty.stage.elem, "mouseup", this._onup);
+			    this._dragging = false;
+			    this.trigger("StopDrag", e);
+			}
+		};
 
 		this.enableDrag();
 	},
@@ -6219,7 +6413,7 @@ Crafty.c("Draggable", {
 	* #.dragDirection
 	* @comp Draggable
 	* @sign public this .dragDirection()
-    * Remove any previously specifed direction.
+    * Remove any previously specified direction.
     *
 	* @sign public this .dragDirection(vector)
     * @param vector - Of the form of {x: valx, y: valy}, the vector (valx, valy) denotes the move direction.
@@ -6231,7 +6425,7 @@ Crafty.c("Draggable", {
 	* @example
 	* ~~~
 	* this.dragDirection()
-	* this.dragDirection({x:1, y:0}) //Horizonatal
+	* this.dragDirection({x:1, y:0}) //Horizontal
 	* this.dragDirection({x:0, y:1}) //Vertical
     * // Note: because of the orientation of x and y axis,
     * // this is 45 degree clockwise with respect to the x axis.
@@ -6256,7 +6450,26 @@ Crafty.c("Draggable", {
       };
 		}
 	},
+	
+	
+	/**@
+	* #._startDrag
+	* @comp Draggable
+	* Internal method for starting a drag of an entity either programatically or via Mouse click
+	*
+	* @param e - a mouse event
+	*/
+	_startDrag: function(e){
+		this._origMouseDOMPos = Crafty.DOM.translate(e.clientX, e.clientY);
+		this._oldX = this._x;
+		this._oldY = this._y;
+		this._dragging = true;
 
+		Crafty.addEvent(this, Crafty.stage.elem, "mousemove", this._ondrag);
+		Crafty.addEvent(this, Crafty.stage.elem, "mouseup", this._onup);
+		this.trigger("StartDrag", e);
+	},
+	
 	/**@
 	* #.stopDrag
 	* @comp Draggable
@@ -6287,8 +6500,8 @@ Crafty.c("Draggable", {
 	*/
 	startDrag: function () {
 		if (!this._dragging) {
-			this._dragging = true;
-			Crafty.addEvent(this, Crafty.stage.elem, "mousemove", this._ondrag);
+			//Use the last known position of the mouse
+			this._startDrag(Crafty.lastEvent);
 		}
 		return this;
 	},
@@ -6343,7 +6556,7 @@ Crafty.c("Keyboard", {
 	* 
 	* @example
 	* ~~~
-	* entity.requires('KeyBoard').bind('KeyDown', function () { if (this.isDown('SPACE')) jump(); });
+	* entity.requires('Keyboard').bind('KeyDown', function () { if (this.isDown('SPACE')) jump(); });
 	* ~~~
 	* 
 	* @see Crafty.keys
@@ -6359,7 +6572,7 @@ Crafty.c("Keyboard", {
 /**@
 * #Multiway
 * @category Input
-* Used to bind keys to directions and have the entity move acordingly
+* Used to bind keys to directions and have the entity move accordingly
 * @trigger NewDirection - triggered when direction changes - { x:Number, y:Number } - New direction
 * @trigger Moved - triggered on movement on either x or y axis. If the entity has moved on both axes for diagonal movement the event is triggered twice - { x:Number, y:Number } - Old position
 */
@@ -6574,7 +6787,7 @@ Crafty.c("Twoway", {
 	* ~~~
 	* 
 	* The key presses will move the entity in that direction by the speed passed in
-	* the argument. Pressing the `Up Arrow` or `W` will cause the entiy to jump.
+	* the argument. Pressing the `Up Arrow` or `W` will cause the entity to jump.
 	* 
 	* @see Gravity, Fourway
 	*/
@@ -6602,6 +6815,83 @@ Crafty.c("Twoway", {
 		});
 
 		return this;
+	}
+});
+
+
+Crafty.c("Animation", {
+	_reel: null,
+
+	init: function () {
+		this._reel = {};
+	},
+
+	addAnimation: function (label, skeleton) {
+		var key,
+			lastKey = 0,
+			i = 0, j,
+			frame,
+			prev,
+			prop,
+			diff = {},
+			p,
+			temp,
+			frames = [];
+
+		//loop over every frame
+		for (key in skeleton) {
+
+			frame = skeleton[key];
+			prev = skeleton[lastKey] || this;
+			diff = {};
+
+			//find the difference
+			for (prop in frame) {
+				if (typeof frame[prop] !== "number") {
+					diff[prop] = frame[prop];
+					continue;
+				}
+
+				diff[prop] = (frame[prop] - prev[prop]) / (key - lastKey);
+			}
+
+			for (i = +lastKey + 1, j = 1; i <= +key; ++i, ++j) {
+				temp = {};
+				for (p in diff) {
+					if (typeof diff[p] === "number") {
+						temp[p] = prev[p] + diff[p] * j;
+					} else {
+						temp[p] = diff[p];
+					}
+				}
+
+				frames[i] = temp;
+			}
+			lastKey = key;
+		}
+
+		this._reel[label] = frames;
+
+		return this;
+	},
+
+	playAnimation: function (label) {
+		var reel = this._reel[label],
+			i = 0,
+			l = reel.length,
+			prop;
+
+		this.bind("EnterFrame", function e() {
+			for (prop in reel[i]) {
+				this[prop] = reel[i][prop];
+			}
+			i++;
+
+			if (i > l) {
+				this.trigger("AnimationEnd");
+				this.unbind("EnterFrame", e);
+			}
+		});
 	}
 });
 
@@ -6849,7 +7139,7 @@ Crafty.c("SpriteAnimation", {
 	* ~~~
 	*/
 	isPlaying: function (reelId) {
-		if (!reelId) return !!this._interval;
+		if (!reelId) return !!this._currentReelId;
 		return this._currentReelId === reelId;
 	}
 });
@@ -6941,6 +7231,7 @@ function tweenEnterFrame(e) {
 }
 
 
+
 /**@
 * #Color
 * @category Graphics
@@ -7017,7 +7308,7 @@ Crafty.c("Tint", {
 	* @comp Tint
 	* @trigger Change - when the tint is applied
 	* @sign public this .tint(String color, Number strength)
-	* @param color - The color in hexidecimal
+	* @param color - The color in hexadecimal
 	* @param strength - Level of opacity
 	* 
 	* Modify the color and level opacity to give a tint on the entity.
@@ -7541,6 +7832,7 @@ Crafty.DrawManager = (function () {
 	};
 })();
 
+
 Crafty.extend({
 /**@
 * #Crafty.isometric
@@ -7565,7 +7857,7 @@ Crafty.extend({
         * @param tileSize - The size of the tiles to place.
         * 
         * Method used to initialize the size of the isometric placement.
-        * Recommended to use a size alues in the power of `2` (128, 64 or 32).
+        * Recommended to use a size values in the power of `2` (128, 64 or 32).
         * This makes it easy to calculate positions and implement zooming.
         * 
         * @example
@@ -7577,13 +7869,13 @@ Crafty.extend({
         */
         size: function (width, height) {
             this._tile.width = width;
-            this._tile.height = height > 0 ? height : width/2; //Setup width/2 if height doesnt set
+            this._tile.height = height > 0 ? height : width/2; //Setup width/2 if height isn't set
             return this;
         },
         /**@
         * #Crafty.isometric.place
         * @comp Crafty.isometric
-        * @sign public this Crafty.isometric.size(Number x, Number y, Number z, Entity tile)
+        * @sign public this Crafty.isometric.place(Number x, Number y, Number z, Entity tile)
         * @param x - The `x` position to place the tile
         * @param y - The `y` position to place the tile
         * @param z - The `z` position or height to place the tile
@@ -7594,7 +7886,7 @@ Crafty.extend({
         * @example
         * ~~~
         * var iso = Crafty.isometric.size(128);
-        * isos.place(2, 1, 0, Crafty.e('2D, DOM, Color').color('red').attr({w:128, h:128}));
+        * iso.place(2, 1, 0, Crafty.e('2D, DOM, Color').color('red').attr({w:128, h:128}));
         * ~~~
         * 
         * @see Crafty.isometric.size
@@ -7616,7 +7908,7 @@ Crafty.extend({
          * @param y
          * @return Object {left Number,top Number}
          * 
-         * This method calculate the X and Y Coordiantes to Pixel Positions
+         * This method calculate the X and Y Coordinates to Pixel Positions
          * 
          * @example
          * ~~~
@@ -7638,7 +7930,7 @@ Crafty.extend({
          * @param left
          * @return Object {x Number,y Number}
          * 
-         * This method calculate pixel top,left positions to x,y coordiantes
+         * This method calculate pixel top,left positions to x,y coordinates
          * 
          * @example
          * ~~~
@@ -7688,7 +7980,7 @@ Crafty.extend({
          * @sign public this Crafty.isometric.area()
          * @return Object {x:{start Number,end Number},y:{start Number,end Number}}
          * 
-         * This method get the Area surounding by the centerpoint depends on viewport height and width
+         * This method get the Area surrounding by the centerpoint depends on viewport height and width
          * 
          * @example
          * ~~~
@@ -7719,6 +8011,8 @@ Crafty.extend({
         } 
     }
 });
+
+
 /**@
 * #Particles
 * @category Graphics
@@ -7878,7 +8172,7 @@ Crafty.c("Particles", {
 			this.position = this.vectorHelpers.create(0, 0);
 			if (typeof options == 'undefined') var options = {};
 
-			//Create current config by mergin given options and presets.
+			//Create current config by merging given options and presets.
 			for (key in this.presets) {
 				if (typeof options[key] != 'undefined') this[key] = options[key];
 				else this[key] = this.presets[key];
@@ -8079,304 +8373,383 @@ Crafty.c("Particles", {
 		}
 	}
 });
+
 Crafty.extend({
-/**@
-* #Crafty.audio
-* @category Audio
-* 
-* Add sound files and play them. Chooses best format for browser support.
-* Due to the nature of HTML5 audio, three types of audio files will be
-* required for cross-browser capabilities. These formats are MP3, Ogg and WAV.
-* When sound was not muted on before pause, sound will be unmuted after unpause.
-* When sound is muted Crafty.pause() does not have any effect on sound.
-*/
-    audio:{
-        sounds:{},
-        supported:{},
-        codecs :{ // Chart from jPlayer
-            ogg:  'audio/ogg; codecs="vorbis"', //OGG
-            wav: 'audio/wav; codecs="1"', // PCM
-            webma:  'audio/webm; codecs="vorbis"',// WEBM
-            mp3:  'audio/mpeg; codecs="mp3"', //MP3
-            m4a: 'audio/mp4; codecs="mp4a.40.2"'// AAC / MP4
-        },
-        volume:1, //Global Volume
-        muted:false,
-        /**
-         * Function to setup supported formats
-         **/
-        canPlay:function(){
-            var audio = this.audioElement(),canplay;
-            for(var i in this.codecs){
-                canplay = audio.canPlayType(this.codecs[i]);
-                if(canplay !== "" && canplay !== "no"){
-                    this.supported[i] = true;
-                }else{
-                    this.supported[i] = false;
-                }
-            }
-          
-        },
-        /**
-         * Function to get an Audio Element
-         **/
-        audioElement:function(){
-            //IE does not support Audio Object
-            return typeof Audio !== 'undefined' ? new Audio("") : document.createElement('audio');
-        },
-        /**@
-        * #Crafty.audio.add
-        * @comp Crafty.audio
-        * @sign public this Crafty.audio.add(String id, String url)
-        * @param id - A string to reffer to sounds
-        * @param url - A string pointing to the sound file
-        * @sign public this Crafty.audio.add(String id, Array urls)
-        * @param urls - Array of urls pointing to different format of the same sound, selecting the first that is playable
-        * @sign public this Crafty.audio.add(Object map)
-        * @param map - key-value pairs where the key is the `id` and the value is either a `url` or `urls`
-        *
-        * Loads a sound to be played. Due to the nature of HTML5 audio,
-        * three types of audio files will be required for cross-browser capabilities.
-        * These formats are MP3, Ogg and WAV.
-        *
-        * Passing an array of URLs will determine which format the browser can play and select it over any other.
-        *
-        * Accepts an object where the key is the audio name and
-        * either a URL or an Array of URLs (to determine which type to use).
-        *
-        * The ID you use will be how you refer to that sound when using `Crafty.audio.play`.
-        *
-        * @example
-        * ~~~
-        * //adding audio from an object
-        * Crafty.audio.add({
-        * shoot: ["sounds/shoot.wav",
-        * "sounds/shoot.mp3",
-        * "sounds/shoot.ogg"],
-        *
-        * coin: "sounds/coin.mp3"
-        * });
-        *
-        * //adding a single sound
-        * Crafty.audio.add("walk", [
-        * "sounds/walk.mp3",
-        * "sounds/walk.ogg",
-        * "sounds/walk.wav"
-        * ]);
-        *
-        * //only one format
-        * Crafty.audio.add("jump", "sounds/jump.mp3");
-        * ~~~
-        */
-        add:function(id,url){
-            Crafty.support.audio = !!this.audioElement().canPlayType; //Setup audio support
-            if (!Crafty.support.audio) return;
-            
-            this.canPlay(); //Setup supported Extensions
-            
-            var audio,ext,path;
-            if(arguments.length === 1 && typeof id === "object"){
-                for(var i in id){
-                    for(var src in id[i]){
-                        audio = this.audioElement();
-                        audio.id = i;
-                        audio.preload = "auto";
-                        audio.volume = Crafty.audio.volume;
-                        path = id[i][src];
-                        ext = path.substr(path.lastIndexOf('.') + 1).toLowerCase();
-                        if(this.supported[ext]){
-                            audio.src = path;
-                            Crafty.asset(path, audio); 
-                            this.sounds[i] = {
-                                obj:audio,
-                                played:0,
-                                volume:Crafty.audio.volume
-                            } 
-                        }
-                        
-                    }
-                }          
-            }
-            if(typeof id === "string"){
-                audio = this.audioElement();
-                audio.id = id;
-                audio.preload = "auto";
-                audio.volume = Crafty.audio.volume;
-              
-                if(typeof url === "string"){
-                    ext = url.substr(url.lastIndexOf('.') + 1).toLowerCase();
-                    if(this.supported[ext]){
-                        audio.src = url;
-                        Crafty.asset(url, audio);  
-                        this.sounds[id] = {
-                            obj:audio,
-                            played:0,
-                            volume:Crafty.audio.volume
-                        } 
-                       
-                    }
-                  
-                }
-             
-                if(typeof url === "object"){
-                    for(src in url){   
-                        audio = this.audioElement();
-                        audio.id = id;
-                        audio.preload = "auto";
-                        audio.volume = Crafty.audio.volume;
-                        path = url[src];
-                        ext = path.substr(path.lastIndexOf('.') + 1).toLowerCase();	
-                        if(this.supported[ext]){
-                            audio.src = path;
-                            Crafty.asset(path, audio);   
-                            this.sounds[id] = {
-                                obj:audio,
-                                played:0,
-                                volume:Crafty.audio.volume
-                            } 
-                        }
-                       
-                    }
-                }
-               
-               
-            }
-          
+	/**@
+	 * #Crafty.audio
+	 * @category Audio
+	 *
+	 * Add sound files and play them. Chooses best format for browser support.
+	 * Due to the nature of HTML5 audio, three types of audio files will be
+	 * required for cross-browser capabilities. These formats are MP3, Ogg and WAV.
+	 * When sound was not muted on before pause, sound will be unmuted after unpause.
+	 * When sound is muted Crafty.pause() does not have any effect on sound.
+	 */
+	audio : {
+		sounds : {},
+		supported : {},
+		codecs : {// Chart from jPlayer
+			ogg : 'audio/ogg; codecs="vorbis"', //OGG
+			wav : 'audio/wav; codecs="1"', // PCM
+			webma : 'audio/webm; codecs="vorbis"', // WEBM
+			mp3 : 'audio/mpeg; codecs="mp3"', //MP3
+			m4a : 'audio/mp4; codecs="mp4a.40.2"'// AAC / MP4
+		},
+		volume : 1, //Global Volume
+		muted : false,
+		paused : false,
+		/**
+		 * Function to setup supported formats
+		 **/
+		canPlay : function() {
+			var audio = this.audioElement(), canplay;
+			for (var i in this.codecs) {
+				canplay = audio.canPlayType(this.codecs[i]);
+				if (canplay !== "" && canplay !== "no") {
+					this.supported[i] = true;
+				} else {
+					this.supported[i] = false;
+				}
+			}
 
-        },
-        /**@
-        * #Crafty.audio.play
-        * @comp Crafty.audio
-        * @sign public this Crafty.audio.play(String id)
-        * @sign public this Crafty.audio.play(String id, Number repeatCount)
-        * @sign public this Crafty.audio.play(String id, Number repeatCount,Number volume)
-        * @param id - A string to reffer to sounds
-        * @param repeatCount - Repeat count for the file, where -1 stands for repeat forever.
-        * @param volume - volume can be a number between 0.0 and 1.0
-        * 
-        * Will play a sound previously added by using the ID that was used in `Crafty.audio.add`.
-        * Has a default maximum of 5 channels so that the same sound can play simultaneously unless all of the channels are playing.
+		},
+		/**
+		 * Function to get an Audio Element
+		 **/
+		audioElement : function() {
+			//IE does not support Audio Object
+			return typeof Audio !== 'undefined' ? new Audio("") : document.createElement('audio');
+		},
+		/**@
+		 * #Crafty.audio.add
+		 * @comp Crafty.audio
+		 * @sign public this Crafty.audio.add(String id, String url)
+		 * @param id - A string to refer to sounds
+		 * @param url - A string pointing to the sound file
+		 * @sign public this Crafty.audio.add(String id, Array urls)
+		 * @param urls - Array of urls pointing to different format of the same sound, selecting the first that is playable
+		 * @sign public this Crafty.audio.add(Object map)
+		 * @param map - key-value pairs where the key is the `id` and the value is either a `url` or `urls`
+		 *
+		 * Loads a sound to be played. Due to the nature of HTML5 audio,
+		 * three types of audio files will be required for cross-browser capabilities.
+		 * These formats are MP3, Ogg and WAV.
+		 *
+		 * Passing an array of URLs will determine which format the browser can play and select it over any other.
+		 *
+		 * Accepts an object where the key is the audio name and
+		 * either a URL or an Array of URLs (to determine which type to use).
+		 *
+		 * The ID you use will be how you refer to that sound when using `Crafty.audio.play`.
+		 *
+		 * @example
+		 * ~~~
+		 * //adding audio from an object
+		 * Crafty.audio.add({
+		 * shoot: ["sounds/shoot.wav",
+		 * "sounds/shoot.mp3",
+		 * "sounds/shoot.ogg"],
+		 *
+		 * coin: "sounds/coin.mp3"
+		 * });
+		 *
+		 * //adding a single sound
+		 * Crafty.audio.add("walk", [
+		 * "sounds/walk.mp3",
+		 * "sounds/walk.ogg",
+		 * "sounds/walk.wav"
+		 * ]);
+		 *
+		 * //only one format
+		 * Crafty.audio.add("jump", "sounds/jump.mp3");
+		 * ~~~
+		 */
+		add : function(id, url) {
+			Crafty.support.audio = !!this.audioElement().canPlayType;
+			//Setup audio support
+			if (!Crafty.support.audio)
+				return;
 
-        * *Note that the implementation of HTML5 Audio is buggy at best.*
-        *
-        * @example
-        * ~~~
-        * Crafty.audio.play("walk");
-        *
-        * //play and repeat forever
-        * Crafty.audio.play("backgroundMusic", -1);
-        * Crafty.audio.play("explosion",1,0.5); //play sound once with volume of 50%
-        * ~~~
-        */
-        play:function(id,repeat,volume){
-            if(repeat == 0 || !Crafty.support.audio || !this.sounds[id]) return;
-            var s = this.sounds[id];
-            s.volume = s.obj.volume = volume || Crafty.audio.volume ;   
-            if(s.obj.currentTime) s.obj.currentTime = 0;   
-            if(this.muted) s.obj.volume = 0;
-            s.obj.play(); 
-            s.played ++;
-            s.obj.addEventListener("ended", function(){
-                if(s.played < repeat || repeat == -1){
-                    if(this.currentTime) this.currentTime = 0;
-                    this.play();
-                    s.played ++;
-                }
-            },true);    
-        },
-        /**@
-        * #Crafty.audio.stop
-        * @sign public this Crafty.audio.stop([Number ID])
-        * 
-        * Stops any playnig sound. if id is not set, stop all sounds which are playing
-        * 
-        * @example
-        * ~~~
-        * //all sounds stopped playing now
-        * Crafty.audio.stop();
-        *
-        * ~~~
-        */
-        stop:function(id){
-            if(!Crafty.support.audio) return;
-            var s;
-            if(!id){
-                for(var i in this.sounds){
-                    s = this.sounds[i];
-                    if(!s.obj.paused) s.obj.pause();
-                }
-            }
-            if(!this.sounds[id]) return;    
-            s = this.sounds[id];
-            if(!s.obj.paused) s.obj.pause();
-        },
-        /**
-        * #Crafty.audio._mute
-        * @sign public this Crafty.audio._mute([Boolean mute])
-        * 
-        * Mute or unmute every Audio instance that is playing.
-        */
-        _mute:function(mute){
-            if(!Crafty.support.audio) return;
-            var s;
-            for(var i in this.sounds){
-                s = this.sounds[i];
-                s.obj.volume = mute ? 0 : s.volume;
-            }
-            this.muted = mute;
-        },
-        /**@
-        * #Crafty.audio.toggleMute
-        * @sign public this Crafty.audio.toggleMute()
-        * 
-        * Mute or unmute every Audio instance that is playing. Toggles between
-        * pausing or playing depending on the state.
-        * 
-        * @example
-        * ~~~
-        * //toggle mute and unmute depending on current state
-        * Crafty.audio.toggleMute();
-        * ~~~
-        */
-        toggleMute:function(){
-            if (!this.muted) {
-                this._mute(true);
-            } else {
-                this._mute(false);
-            }
+			this.canPlay();
+			//Setup supported Extensions
 
-        },
-        /**@
-        * #Crafty.audio.mute
-        * @sign public this Crafty.audio.mute()
-        * 
-        * Mute every Audio instance that is playing.
-        *
-        * @example
-        * ~~~
-        * Crafty.audio.mute();
-        * ~~~
-        */
-        mute:function(){
-            this._mute(true);
-        },
-        /**@
-        * #Crafty.audio.unmute
-        * @sign public this Crafty.audio.unmute()
-        * 
-        * Unmute every Audio instance that is playing. 
-        * 
-        * @example
-        * ~~~
-        * Crafty.audio.unmute();
-        * ~~~
-        */
-        unmute:function(){
-            this._mute(false);
-        }
+			var audio, ext, path;
+			if (arguments.length === 1 && typeof id === "object") {
+				for (var i in id) {
+					for (var src in id[i]) {
+						audio = this.audioElement();
+						audio.id = i;
+						audio.preload = "auto";
+						audio.volume = Crafty.audio.volume;
+						path = id[i][src];
+						ext = path.substr(path.lastIndexOf('.') + 1).toLowerCase();
+						if (this.supported[ext]) {
+							audio.src = path;
+							Crafty.asset(path, audio);
+							this.sounds[i] = {
+								obj : audio,
+								played : 0,
+								volume : Crafty.audio.volume
+							}
+						}
 
-    } 
+					}
+				}
+			}
+			if ( typeof id === "string") {
+				audio = this.audioElement();
+				audio.id = id;
+				audio.preload = "auto";
+				audio.volume = Crafty.audio.volume;
+
+				if ( typeof url === "string") {
+					ext = url.substr(url.lastIndexOf('.') + 1).toLowerCase();
+					if (this.supported[ext]) {
+						audio.src = url;
+						Crafty.asset(url, audio);
+						this.sounds[id] = {
+							obj : audio,
+							played : 0,
+							volume : Crafty.audio.volume
+						}
+
+					}
+
+				}
+
+				if ( typeof url === "object") {
+					for (src in url) {
+						audio = this.audioElement();
+						audio.id = id;
+						audio.preload = "auto";
+						audio.volume = Crafty.audio.volume;
+						path = url[src];
+						ext = path.substr(path.lastIndexOf('.') + 1).toLowerCase();
+						if (this.supported[ext]) {
+							audio.src = path;
+							Crafty.asset(path, audio);
+							this.sounds[id] = {
+								obj : audio,
+								played : 0,
+								volume : Crafty.audio.volume
+							}
+						}
+
+					}
+				}
+
+			}
+
+		},
+		/**@
+		 * #Crafty.audio.play
+		 * @comp Crafty.audio
+		 * @sign public this Crafty.audio.play(String id)
+		 * @sign public this Crafty.audio.play(String id, Number repeatCount)
+		 * @sign public this Crafty.audio.play(String id, Number repeatCount,Number volume)
+		 * @param id - A string to refer to sounds
+		 * @param repeatCount - Repeat count for the file, where -1 stands for repeat forever.
+		 * @param volume - volume can be a number between 0.0 and 1.0
+		 *
+		 * Will play a sound previously added by using the ID that was used in `Crafty.audio.add`.
+		 * Has a default maximum of 5 channels so that the same sound can play simultaneously unless all of the channels are playing.
+
+		 * *Note that the implementation of HTML5 Audio is buggy at best.*
+		 *
+		 * @example
+		 * ~~~
+		 * Crafty.audio.play("walk");
+		 *
+		 * //play and repeat forever
+		 * Crafty.audio.play("backgroundMusic", -1);
+		 * Crafty.audio.play("explosion",1,0.5); //play sound once with volume of 50%
+		 * ~~~
+		 */
+		play : function(id, repeat, volume) {
+			if (repeat == 0 || !Crafty.support.audio || !this.sounds[id])
+				return;
+			var s = this.sounds[id];
+			s.volume = s.obj.volume = volume || Crafty.audio.volume;
+			if (s.obj.currentTime)
+				s.obj.currentTime = 0;
+			if (this.muted)
+				s.obj.volume = 0;
+			s.obj.play();
+			s.played++;
+			s.obj.addEventListener("ended", function() {
+				if (s.played < repeat || repeat == -1) {
+					if (this.currentTime)
+						this.currentTime = 0;
+					this.play();
+					s.played++;
+				}
+			}, true);
+		},
+		/**@
+		 * #Crafty.audio.stop
+		 * @sign public this Crafty.audio.stop([Number ID])
+		 *
+		 * Stops any playing sound. if id is not set, stop all sounds which are playing
+		 *
+		 * @example
+		 * ~~~
+		 * //all sounds stopped playing now
+		 * Crafty.audio.stop();
+		 *
+		 * ~~~
+		 */
+		stop : function(id) {
+			if (!Crafty.support.audio)
+				return;
+			var s;
+			if (!id) {
+				for (var i in this.sounds) {
+					s = this.sounds[i];
+					if (!s.obj.paused)
+						s.obj.pause();
+				}
+			}
+			if (!this.sounds[id])
+				return;
+			s = this.sounds[id];
+			if (!s.obj.paused)
+				s.obj.pause();
+		},
+		/**
+		 * #Crafty.audio._mute
+		 * @sign public this Crafty.audio._mute([Boolean mute])
+		 *
+		 * Mute or unmute every Audio instance that is playing.
+		 */
+		_mute : function(mute) {
+			if (!Crafty.support.audio)
+				return;
+			var s;
+			for (var i in this.sounds) {
+				s = this.sounds[i];
+				s.obj.volume = mute ? 0 : s.volume;
+			}
+			this.muted = mute;
+		},
+		/**@
+		 * #Crafty.audio.toggleMute
+		 * @sign public this Crafty.audio.toggleMute()
+		 *
+		 * Mute or unmute every Audio instance that is playing. Toggles between
+		 * pausing or playing depending on the state.
+		 *
+		 * @example
+		 * ~~~
+		 * //toggle mute and unmute depending on current state
+		 * Crafty.audio.toggleMute();
+		 * ~~~
+		 */
+		toggleMute : function() {
+			if (!this.muted) {
+				this._mute(true);
+			} else {
+				this._mute(false);
+			}
+
+		},
+		/**@
+		 * #Crafty.audio.mute
+		 * @sign public this Crafty.audio.mute()
+		 *
+		 * Mute every Audio instance that is playing.
+		 *
+		 * @example
+		 * ~~~
+		 * Crafty.audio.mute();
+		 * ~~~
+		 */
+		mute : function() {
+			this._mute(true);
+		},
+		/**@
+		 * #Crafty.audio.unmute
+		 * @sign public this Crafty.audio.unmute()
+		 *
+		 * Unmute every Audio instance that is playing.
+		 *
+		 * @example
+		 * ~~~
+		 * Crafty.audio.unmute();
+		 * ~~~
+		 */
+		unmute : function() {
+			this._mute(false);
+		},
+
+		/**@
+		 * #Crafty.audio.pause
+		 * @sign public this Crafty.audio.pause(string ID)
+		 *
+		 * Pause the Audio instance specified by id param.
+		 *
+		 * @example
+		 * ~~~
+		 * Crafty.audio.pause('music');
+		 * ~~~
+		 *
+		 * @param {string} id The id of the audio object to pause
+		 */
+		pause : function(id) {
+			if (!Crafty.support.audio || !id || !this.sounds[id])
+				return;
+			var s = this.sounds[id];
+			if (!s.obj.paused)
+				s.obj.pause();
+		},
+
+		/**@
+		 * #Crafty.audio.unpause
+		 * @sign public this Crafty.audio.unpause(string ID)
+		 *
+		 * Resume playing the Audio instance specified by id param.
+		 *
+		 * @example
+		 * ~~~
+		 * Crafty.audio.unpause('music');
+		 * ~~~
+		 *
+		 * @param {string} id The id of the audio object to unpause
+		 */
+		unpause : function(id) {
+			if (!Crafty.support.audio || !id || !this.sounds[id])
+				return;
+			var s = this.sounds[id];
+			if (s.obj.paused)
+				s.obj.play();
+		},
+
+		/**@
+		 * #Crafty.audio.togglePause
+		 * @sign public this Crafty.audio.togglePause(string ID)
+		 *
+		 * Toggle the pause status of the Audio instance specified by id param.
+		 *
+		 * @example
+		 * ~~~
+		 * Crafty.audio.togglePause('music');
+		 * ~~~
+		 *
+		 * @param {string} id The id of the audio object to pause/unpause
+		 */
+		togglePause : function(id) {
+			if (!Crafty.support.audio || !id || !this.sounds[id])
+				return;
+			var s = this.sounds[id];
+			if (s.obj.paused) {
+				s.obj.play();
+			} else {
+				s.obj.pause();
+			}
+		}
+	}
 });
+
+
 /**@
 * #Text
 * @category Graphics
@@ -8454,7 +8827,7 @@ Crafty.c("Text", {
     * ~~~
     */
 	text: function (text) {
-		if (!text) return this._text;
+		if (!(typeof text !== "undefined" && text !== null)) return this._text;
 		if (typeof(text) == "function")
 			this._text = text.call(this);
 		else
@@ -8467,7 +8840,7 @@ Crafty.c("Text", {
     * #.textColor
     * @comp Text
     * @sign public this .textColor(String color, Number strength)
-    * @param color - The color in hexidecimal
+    * @param color - The color in hexadecimal
     * @param strength - Level of opacity
     *
     * Modify the text color and level of opacity.
@@ -8532,6 +8905,7 @@ Crafty.c("Text", {
 	}
 });
 
+
 Crafty.extend({
 /**@
 	* #Crafty.assets
@@ -8581,7 +8955,37 @@ Crafty.extend({
             this.trigger("NewAsset", {key : key, value : value});
         }
     },
-
+        /**@
+	* #Crafty.image_whitelist
+	* @category Assets
+	* 
+    * 
+    * A list of file extensions that can be loaded as images by Crafty.load
+    *
+	* @example
+	* ~~~
+        * Crafty.image_whitelist.push("tif")
+	* Crafty.load(["images/sprite.tif", "sounds/jump.mp3"],
+	*     function() {
+	*         //when loaded
+	*         Crafty.scene("main"); //go to main scene
+	*         Crafty.audio.play("jump.mp3"); //Play the audio file
+	*     },
+	*
+	*     function(e) {
+	*       //progress
+	*     },
+	*
+	*     function(e) {
+	*       //uh oh, error loading
+	*     }
+	* );
+	* ~~~
+	* 
+	* @see Crafty.asset
+        * @see Crafty.load
+	*/
+    image_whitelist: ["jpg", "jpeg", "gif", "png", "svg"],
 	/**@
 	* #Crafty.loader
 	* @category Assets
@@ -8594,7 +8998,7 @@ Crafty.extend({
 	* Preloader for all assets. Takes an array of URLs and
 	* adds them to the `Crafty.assets` object.
 	*
-	* Files with suffixes `jpg`, `jpeg`, `gif` and `png` (case insensitive) will be loaded.
+	* Files with suffixes in `image_whitelist` (case insensitive) will be loaded.
 	*
 	* If `Crafty.support.audio` is `true`, files with the following suffixes `mp3`, `wav`, `ogg` and `mp4` (case insensitive) can be loaded.
 	*
@@ -8607,7 +9011,7 @@ Crafty.extend({
 	*
 	* `onError` will be passed with the asset that couldn't load.
     *
-	* When `onError` is not provided, the onLoad is loaded even some assests are not successfully loaded. Otherwise, onLoad will be called no matter whether there are errors or not. 
+	* When `onError` is not provided, the onLoad is loaded even some assets are not successfully loaded. Otherwise, onLoad will be called no matter whether there are errors or not. 
 	* 
 	* @example
 	* ~~~
@@ -8629,6 +9033,7 @@ Crafty.extend({
 	* ~~~
 	* 
 	* @see Crafty.assets
+        * @see Crafty.image_whitelist
 	*/
     load: function (data, oncomplete, onprogress, onerror) {
             
@@ -8672,7 +9077,7 @@ Crafty.extend({
            
         for (; i < l; ++i) {       
             current = data[i];
-            ext = current.substr(current.lastIndexOf('.') + 1).toLowerCase();
+            ext = current.substr(current.lastIndexOf('.') + 1, 3).toLowerCase();
            
             obj = Crafty.asset(current) || null;   
           
@@ -8698,7 +9103,7 @@ Crafty.extend({
                 }
                    
                  
-            } else if (ext === "jpg" || ext === "jpeg" || ext === "gif" || ext === "png") { 
+            } else if (Crafty.image_whitelist.indexOf(ext) >= 0) { 
                 if(!obj) {
                     obj = new Image();
                     Crafty.asset(current, obj);   
@@ -8722,14 +9127,9 @@ Crafty.extend({
 	* @param modules - Map of name:version pairs for modules to load
 	* @param onLoad - Callback when the modules are loaded
 	* 
-	* Browse the selection of modules on crafty repositories.
-	* Downloads and executes the javascript in the specified modules.
-	* If no repository is specified it defaults to http://cdn.craftycomponents.com
-	*
-	* Available repositories:
-	*
-	* 	- http://cdn.craftycomponents.com
-	* 	- http://cdn.crafty-modules.com
+	* Browse the selection of community modules on http://craftycomponents.com
+	* 
+    * It is possible to create your own repository.
 	*
 	*
 	* @example
@@ -8902,6 +9302,7 @@ Crafty.extend({
 		});
 	}
 });
+
 
 /**@
 * #Crafty.math
@@ -9092,7 +9493,7 @@ Crafty.math = {
 	},
 
 	/**@
-     * #Crafty.math.squaredDistance
+     * #Crafty.math.withinRange
 	 * @comp Crafty.math
 	 * @sign public Boolean Crafty.math.withinRange(Number value, Number min, Number max)
      * @param value - The specific value.
@@ -9110,7 +9511,7 @@ Crafty.math = {
 Crafty.math.Vector2D = (function () {
 	/**@
 	 * #Crafty.math.Vector2D
-	 *
+	 * @category 2D
 	 * @class This is a general purpose 2D vector class
 	 *
 	 * Vector2D uses the following form:
@@ -9138,8 +9539,9 @@ Crafty.math.Vector2D = (function () {
 	Vector2D.prototype.y = 0;
 
 	/**@
-	 * #.add( )
-	 *
+	 * #.add
+	 * @comp Crafty.math.Vector2D
+     *
 	 * Adds the passed vector to this vector
 	 *
 	 * @public
@@ -9151,13 +9553,14 @@ Crafty.math.Vector2D = (function () {
 		this.x += vecRH.x;
 		this.y += vecRH.y;
 		return this;
-	} // add( )
+	} // add
 
 	/**@
-	 * #.angleBetween( )
+	 * #.angleBetween
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Calculates the angle between the passed vector and this vector, using <0,0> as the point of reference.
-	 * Angles returned have the range (−π, π].
+	 * Angles returned have the range (âˆ’Ï€, Ï€].
 	 *
 	 * @public
 	 * @sign public {Number} angleBetween(Vector2D);
@@ -9166,10 +9569,11 @@ Crafty.math.Vector2D = (function () {
 	 */
 	Vector2D.prototype.angleBetween = function (vecRH) {
 		return Math.atan2(this.x * vecRH.y - this.y * vecRH.x, this.x * vecRH.x + this.y * vecRH.y);
-	} // angleBetween( )
+	} // angleBetween
 
 	/**@
-	 * #.angleTo( )
+	 * #.angleTo
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Calculates the angle to the passed vector from this vector, using this vector as the point of reference.
 	 *
@@ -9183,7 +9587,8 @@ Crafty.math.Vector2D = (function () {
 	};
 
 	/**@
-	 * #.clone( )
+	 * #.clone
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Creates and exact, numeric copy of this vector
 	 *
@@ -9191,12 +9596,13 @@ Crafty.math.Vector2D = (function () {
 	 * @sign public {Vector2D} clone();
 	 * @returns {Vector2D} the new vector
 	 */
-	Vector2D.prototype.clone = function () {
-		return new Vector2D(this);
-	} // clone( )
+    Vector2D.prototype.clone = function() {
+        return new Vector2D(this);
+    }; // clone
 
 	/**@
-	 * #.distance( )
+	 * #.distance
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Calculates the distance from this vector to the passed vector.
 	 *
@@ -9205,12 +9611,13 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Vector2D} vecRH
 	 * @returns {Number} the distance between the two vectors
 	 */
-	Vector2D.prototype.distance = function (vecRH) {
-		return Math.sqrt((vecRH.x - this.x) * (vecRH.x - this.x) + (vecRH.y - this.y) * (vecRH.y - this.y));
-	} // distance( )
+    Vector2D.prototype.distance = function(vecRH) {
+        return Math.sqrt((vecRH.x - this.x) * (vecRH.x - this.x) + (vecRH.y - this.y) * (vecRH.y - this.y));
+    }; // distance
 
 	/**@
-	 * #.distanceSq( )
+	 * #.distanceSq
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Calculates the squared distance from this vector to the passed vector.
 	 * This function avoids calculating the square root, thus being slightly faster than .distance( ).
@@ -9219,14 +9626,15 @@ Crafty.math.Vector2D = (function () {
 	 * @sign public {Number} distanceSq(Vector2D);
 	 * @param {Vector2D} vecRH
 	 * @returns {Number} the squared distance between the two vectors
-	 * @see Vector2D.distance( )
+	 * @see .distance
 	 */
-	Vector2D.prototype.distanceSq = function (vecRH) {
-		return (vecRH.x - this.x) * (vecRH.x - this.x) + (vecRH.y - this.y) * (vecRH.y - this.y);
-	} // distanceSq( )
+    Vector2D.prototype.distanceSq = function(vecRH) {
+        return (vecRH.x - this.x) * (vecRH.x - this.x) + (vecRH.y - this.y) * (vecRH.y - this.y);
+    }; // distanceSq
 
 	/**@
-	 * #.divide( )
+	 * #.divide
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Divides this vector by the passed vector.
 	 *
@@ -9235,14 +9643,15 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Vector2D} vecRH
 	 * @returns {Vector2D} this vector after dividing
 	 */
-	Vector2D.prototype.divide = function (vecRH) {
-		this.x /= vecRH.x;
-		this.y /= vecRH.y;
-		return this;
-	} // divide( )
+    Vector2D.prototype.divide = function(vecRH) {
+        this.x /= vecRH.x;
+        this.y /= vecRH.y;
+        return this;
+    }; // divide
 
 	/**@
-	 * #.dotProduct( )
+	 * #.dotProduct
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Calculates the dot product of this and the passed vectors
 	 *
@@ -9251,12 +9660,13 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Vector2D} vecRH
 	 * @returns {Number} the resultant dot product
 	 */
-	Vector2D.prototype.dotProduct = function (vecRH) {
-		return this.x * vecRH.x + this.y * vecRH.y;
-	} // dotProduct( )
+    Vector2D.prototype.dotProduct = function(vecRH) {
+        return this.x * vecRH.x + this.y * vecRH.y;
+    }; // dotProduct
 
 	/**@
-	 * #.equals( )
+	 * #.equals
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Determines if this vector is numerically equivalent to the passed vector.
 	 *
@@ -9265,13 +9675,14 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Vector2D} vecRH
 	 * @returns {Boolean} true if the vectors are equivalent
 	 */
-	Vector2D.prototype.equals = function (vecRH) {
-		return vecRH instanceof Vector2D &&
-			this.x == vecRH.x && this.y == vecRH.y;
-	} // equals( )
+    Vector2D.prototype.equals = function(vecRH) {
+        return vecRH instanceof Vector2D &&
+            this.x == vecRH.x && this.y == vecRH.y;
+    }; // equals
 
 	/**@
-	 * #.getNormal( )
+	 * #.getNormal
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Calculates a new right-handed normal vector for the line created by this and the passed vectors.
 	 *
@@ -9280,14 +9691,15 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Vector2D=<0,0>} [vecRH]
 	 * @returns {Vector2D} the new normal vector
 	 */
-	Vector2D.prototype.getNormal = function (vecRH) {
-		if (vecRH === undefined)
-			return new Vector2D(-this.y, this.x); // assume vecRH is <0, 0>
-		return new Vector2D(vecRH.y - this.y, this.x - vecRH.x).normalize();
-	} // getNormal( )
+    Vector2D.prototype.getNormal = function(vecRH) {
+        if (vecRH === undefined)
+            return new Vector2D(-this.y, this.x); // assume vecRH is <0, 0>
+        return new Vector2D(vecRH.y - this.y, this.x - vecRH.x).normalize();
+    }; // getNormal
 
 	/**@
-	 * #.isZero( )
+	 * #.isZero
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Determines if this vector is equal to <0,0>
 	 *
@@ -9295,12 +9707,13 @@ Crafty.math.Vector2D = (function () {
 	 * @sign public {Boolean} isZero();
 	 * @returns {Boolean} true if this vector is equal to <0,0>
 	 */
-	Vector2D.prototype.isZero = function () {
-		return this.x === 0 && this.y === 0;
-	} // isZero( )
+    Vector2D.prototype.isZero = function() {
+        return this.x === 0 && this.y === 0;
+    }; // isZero
 
 	/**@
-	 * #.magnitude( )
+	 * #.magnitude
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Calculates the magnitude of this vector.
 	 * Note: Function objects in JavaScript already have a 'length' member, hence the use of magnitude instead.
@@ -9309,12 +9722,13 @@ Crafty.math.Vector2D = (function () {
 	 * @sign public {Number} magnitude();
 	 * @returns {Number} the magnitude of this vector
 	 */
-	Vector2D.prototype.magnitude = function () {
-		return Math.sqrt(this.x * this.x + this.y * this.y);
-	} // magnitude( )
+    Vector2D.prototype.magnitude = function() {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+    }; // magnitude
 
 	/**@
-	 * #.magnitudeSq( )
+	 * #.magnitudeSq
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Calculates the square of the magnitude of this vector.
 	 * This function avoids calculating the square root, thus being slightly faster than .magnitude( ).
@@ -9322,14 +9736,15 @@ Crafty.math.Vector2D = (function () {
 	 * @public
 	 * @sign public {Number} magnitudeSq();
 	 * @returns {Number} the square of the magnitude of this vector
-	 * @see Vector2D.magnitude( )
+	 * @see .magnitude
 	 */
-	Vector2D.prototype.magnitudeSq = function () {
-		return this.x * this.x + this.y * this.y;
-	} // magnitudeSq( )
+    Vector2D.prototype.magnitudeSq = function() {
+        return this.x * this.x + this.y * this.y;
+    }; // magnitudeSq
 
 	/**@
-	 * #.multiply( )
+	 * #.multiply
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Multiplies this vector by the passed vector
 	 *
@@ -9338,14 +9753,15 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Vector2D} vecRH
 	 * @returns {Vector2D} this vector after multiplying
 	 */
-	Vector2D.prototype.multiply = function (vecRH) {
-		this.x *= vecRH.x;
-		this.y *= vecRH.y;
-		return this;
-	} // multiply( )
+    Vector2D.prototype.multiply = function(vecRH) {
+        this.x *= vecRH.x;
+        this.y *= vecRH.y;
+        return this;
+    }; // multiply
 
 	/**@
-	 * #.negate( )
+	 * #.negate
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Negates this vector (ie. <-x,-y>)
 	 *
@@ -9353,14 +9769,15 @@ Crafty.math.Vector2D = (function () {
 	 * @sign public {Vector2D} negate();
 	 * @returns {Vector2D} this vector after negation
 	 */
-	Vector2D.prototype.negate = function () {
-		this.x = -this.x;
-		this.y = -this.y;
-		return this;
-	} // negate( )
+    Vector2D.prototype.negate = function() {
+        this.x = -this.x;
+        this.y = -this.y;
+        return this;
+    }; // negate
 
 	/**@
-	 * #.normalize( )
+	 * #.normalize
+     * @comp Crafty.math.Vector2D
 	 *
 	 * Normalizes this vector (scales the vector so that its new magnitude is 1)
 	 * For vectors where magnitude is 0, <1,0> is returned.
@@ -9369,24 +9786,25 @@ Crafty.math.Vector2D = (function () {
 	 * @sign public {Vector2D} normalize();
 	 * @returns {Vector2D} this vector after normalization
 	 */
-	Vector2D.prototype.normalize = function () {
-		var lng = Math.sqrt(this.x * this.x + this.y * this.y);
+    Vector2D.prototype.normalize = function() {
+        var lng = Math.sqrt(this.x * this.x + this.y * this.y);
 
-		if (lng === 0) {
-			// default due East
-			this.x = 1;
-			this.y = 0;
-		} else {
-			this.x /= lng;
-			this.y /= lng;
-		} // else
+        if (lng === 0) {
+            // default due East
+            this.x = 1;
+            this.y = 0;
+        } else {
+            this.x /= lng;
+            this.y /= lng;
+        } // else
 
-		return this;
-	} // normalize( )
+        return this;
+    }; // normalize
 
 	/**@
-	 * #.scale( )
-	 *
+	 * #.scale
+	 * @comp Crafty.math.Vector2D
+     *
 	 * Scales this vector by the passed amount(s)
 	 * If scalarY is omitted, scalarX is used for both axes
 	 *
@@ -9396,19 +9814,20 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Number} [scalarY]
 	 * @returns {Vector2D} this after scaling
 	 */
-	Vector2D.prototype.scale = function (scalarX, scalarY) {
-		if (scalarY === undefined)
-			scalarY = scalarX;
+    Vector2D.prototype.scale = function(scalarX, scalarY) {
+        if (scalarY === undefined)
+            scalarY = scalarX;
 
-		this.x *= scalarX;
-		this.y *= scalarY;
+        this.x *= scalarX;
+        this.y *= scalarY;
 
-		return this;
-	} // scale( )
+        return this;
+    }; // scale
 
 	/**@
-	 * #.scaleToMagnitude( )
-	 *
+	 * #.scaleToMagnitude
+	 * @comp Crafty.math.Vector2D
+     *
 	 * Scales this vector such that its new magnitude is equal to the passed value.
 	 *
 	 * @public
@@ -9416,16 +9835,17 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Number} mag
 	 * @returns {Vector2D} this vector after scaling
 	 */
-	Vector2D.prototype.scaleToMagnitude = function (mag) {
-		var k = mag / this.magnitude();
-		this.x *= k;
-		this.y *= k;
-		return this;
-	} // scaleToMagnitude( )
+    Vector2D.prototype.scaleToMagnitude = function(mag) {
+        var k = mag / this.magnitude();
+        this.x *= k;
+        this.y *= k;
+        return this;
+    }; // scaleToMagnitude
 
 	/**@
-	 * #.setValues( )
-	 *
+	 * #.setValues
+	 * @comp Crafty.math.Vector2D
+     *
 	 * Sets the values of this vector using a passed vector or pair of numbers.
 	 *
 	 * @public
@@ -9435,21 +9855,22 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Number} y
 	 * @returns {Vector2D} this vector after setting of values
 	 */
-	Vector2D.prototype.setValues = function (x, y) {
-		if (x instanceof Vector2D) {
-			this.x = x.x;
-			this.y = x.y;
-		} else {
-			this.x = x;
-			this.y = y;
-		} // else
+    Vector2D.prototype.setValues = function(x, y) {
+        if (x instanceof Vector2D) {
+            this.x = x.x;
+            this.y = x.y;
+        } else {
+            this.x = x;
+            this.y = y;
+        } // else
 
-		return this;
-	} // setValues( )
+        return this;
+    }; // setValues
 
 	/**@
-	 * #.subtract( )
-	 *
+	 * #.subtract
+	 * @comp Crafty.math.Vector2D
+     *
 	 * Subtracts the passed vector from this vector.
 	 *
 	 * @public
@@ -9457,28 +9878,30 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Vector2D} vecRH
 	 * @returns {vector2D} this vector after subtracting
 	 */
-	Vector2D.prototype.subtract = function (vecRH) {
-		this.x -= vecRH.x;
-		this.y -= vecRH.y;
-		return this;
-	} // subtract( )
+    Vector2D.prototype.subtract = function(vecRH) {
+        this.x -= vecRH.x;
+        this.y -= vecRH.y;
+        return this;
+    }; // subtract
 
 	/**@
-	 * #.toString( )
-	 *
+	 * #.toString
+	 * @comp Crafty.math.Vector2D
+     *
 	 * Returns a string representation of this vector.
 	 *
 	 * @public
 	 * @sign public {String} toString();
 	 * @returns {String}
 	 */
-	Vector2D.prototype.toString = function () {
-		return "Vector2D(" + this.x + ", " + this.y + ")";
-	} // toString( )
+    Vector2D.prototype.toString = function() {
+        return "Vector2D(" + this.x + ", " + this.y + ")";
+    }; // toString
 
 	/**@
-	 * #.translate( )
-	 *
+	 * #.translate
+	 * @comp Crafty.math.Vector2D
+     *
 	 * Translates (moves) this vector by the passed amounts.
 	 * If dy is omitted, dx is used for both axes.
 	 *
@@ -9488,21 +9911,22 @@ Crafty.math.Vector2D = (function () {
 	 * @param {Number} [dy]
 	 * @returns {Vector2D} this vector after translating
 	 */
-	Vector2D.prototype.translate = function (dx, dy) {
-		if (dy === undefined)
-			dy = dx;
+    Vector2D.prototype.translate = function(dx, dy) {
+        if (dy === undefined)
+            dy = dx;
 
-		this.x += dx;
-		this.y += dy;
+        this.x += dx;
+        this.y += dy;
 
-		return this;
-	} // translate( )
+        return this;
+    }; // translate
 
 	/**@
-	 * #.tripleProduct( )
-	 *
+	 * #.tripleProduct
+	 * @comp Crafty.math.Vector2D
+     *
 	 * Calculates the triple product of three vectors.
-	 * triple vector product = b(a•c) - a(b•c)
+	 * triple vector product = b(aâ€¢c) - a(bâ€¢c)
 	 *
 	 * @public
 	 * @static
@@ -9524,6 +9948,7 @@ Crafty.math.Vector2D = (function () {
 Crafty.math.Matrix2D = (function () {
 	/**@
 	 * #Crafty.math.Matrix2D
+	 * @category 2D
 	 *
 	 * @class This is a 2D Matrix2D class. It is 3x3 to allow for affine transformations in 2D space.
 	 * The third row is always assumed to be [0, 0, 1].
@@ -9571,7 +9996,8 @@ Crafty.math.Matrix2D = (function () {
 	Matrix2D.prototype.f = 0;
 
 	/**@
-	 * #.apply( )
+	 * #.apply
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Applies the matrix transformations to the passed object
 	 *
@@ -9580,22 +10006,23 @@ Crafty.math.Matrix2D = (function () {
 	 * @param {Vector2D} vecRH - vector to be transformed
 	 * @returns {Vector2D} the passed vector object after transforming
 	 */
-	Matrix2D.prototype.apply = function (vecRH) {
-		// I'm not sure of the best way for this function to be implemented. Ideally
-		// support for other objects (rectangles, polygons, etc) should be easily
-		// addable in the future. Maybe a function (apply) is not the best way to do
-		// this...?
+    Matrix2D.prototype.apply = function(vecRH) {
+        // I'm not sure of the best way for this function to be implemented. Ideally
+        // support for other objects (rectangles, polygons, etc) should be easily
+        // addable in the future. Maybe a function (apply) is not the best way to do
+        // this...?
 
-		var tmpX = vecRH.x;
-		vecRH.x = tmpX * this.a + vecRH.y * this.c + this.e;
-		vecRH.y = tmpX * this.b + vecRH.y * this.d + this.f;
-		// no need to homogenize since the third row is always [0, 0, 1]
+        var tmpX = vecRH.x;
+        vecRH.x = tmpX * this.a + vecRH.y * this.c + this.e;
+        vecRH.y = tmpX * this.b + vecRH.y * this.d + this.f;
+        // no need to homogenize since the third row is always [0, 0, 1]
 
-		return vecRH;
-	} // apply( )
+        return vecRH;
+    }; // apply
 
 	/**@
-	 * #.clone( )
+	 * #.clone
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Creates an exact, numeric copy of the current matrix
 	 *
@@ -9603,12 +10030,13 @@ Crafty.math.Matrix2D = (function () {
 	 * @sign public {Matrix2D} clone();
 	 * @returns {Matrix2D}
 	 */
-	Matrix2D.prototype.clone = function () {
-		return new Matrix2D(this);
-	} // clone( )
+    Matrix2D.prototype.clone = function() {
+        return new Matrix2D(this);
+    }; // clone
 
 	/**@
-	 * #.combine( )
+	 * #.combine
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Multiplies this matrix with another, overriding the values of this matrix.
 	 * The passed matrix is assumed to be on the right-hand side.
@@ -9618,21 +10046,22 @@ Crafty.math.Matrix2D = (function () {
 	 * @param {Matrix2D} mtrxRH
 	 * @returns {Matrix2D} this matrix after combination
 	 */
-	Matrix2D.prototype.combine = function (mtrxRH) {
-		var tmp = this.a;
-		this.a = tmp * mtrxRH.a + this.b * mtrxRH.c;
-		this.b = tmp * mtrxRH.b + this.b * mtrxRH.d;
-		tmp = this.c;
-		this.c = tmp * mtrxRH.a + this.d * mtrxRH.c;
-		this.d = tmp * mtrxRH.b + this.d * mtrxRH.d;
-		tmp = this.e;
-		this.e = tmp * mtrxRH.a + this.f * mtrxRH.c + mtrxRH.e;
-		this.f = tmp * mtrxRH.b + this.f * mtrxRH.d + mtrxRH.f;
-		return this;
-	} // combine( )
+    Matrix2D.prototype.combine = function(mtrxRH) {
+        var tmp = this.a;
+        this.a = tmp * mtrxRH.a + this.b * mtrxRH.c;
+        this.b = tmp * mtrxRH.b + this.b * mtrxRH.d;
+        tmp = this.c;
+        this.c = tmp * mtrxRH.a + this.d * mtrxRH.c;
+        this.d = tmp * mtrxRH.b + this.d * mtrxRH.d;
+        tmp = this.e;
+        this.e = tmp * mtrxRH.a + this.f * mtrxRH.c + mtrxRH.e;
+        this.f = tmp * mtrxRH.b + this.f * mtrxRH.d + mtrxRH.f;
+        return this;
+    }; // combine
 
 	/**@
-	 * #.equals( )
+	 * #.equals
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Checks for the numeric equality of this matrix versus another.
 	 *
@@ -9641,14 +10070,15 @@ Crafty.math.Matrix2D = (function () {
 	 * @param {Matrix2D} mtrxRH
 	 * @returns {Boolean} true if the two matrices are numerically equal
 	 */
-	Matrix2D.prototype.equals = function (mtrxRH) {
-		return mtrxRH instanceof Matrix2D &&
-			this.a == mtrxRH.a && this.b == mtrxRH.b && this.c == mtrxRH.c &&
-			this.d == mtrxRH.d && this.e == mtrxRH.e && this.f == mtrxRH.f;
-	} // equals( )
+    Matrix2D.prototype.equals = function(mtrxRH) {
+        return mtrxRH instanceof Matrix2D &&
+            this.a == mtrxRH.a && this.b == mtrxRH.b && this.c == mtrxRH.c &&
+            this.d == mtrxRH.d && this.e == mtrxRH.e && this.f == mtrxRH.f;
+    }; // equals
 
 	/**@
-	 * #.determinant( )
+	 * #.determinant
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Calculates the determinant of this matrix
 	 *
@@ -9656,46 +10086,48 @@ Crafty.math.Matrix2D = (function () {
 	 * @sign public {Number} determinant();
 	 * @returns {Number} det(this matrix)
 	 */
-	Matrix2D.prototype.determinant = function () {
-		return this.a * this.d - this.b * this.c;
-	} // determinant( )
+    Matrix2D.prototype.determinant = function() {
+        return this.a * this.d - this.b * this.c;
+    }; // determinant
 
 	/**@
-	 * #.invert( )
+	 * #.invert
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Inverts this matrix if possible
 	 *
 	 * @public
 	 * @sign public {Matrix2D} invert();
 	 * @returns {Matrix2D} this inverted matrix or the original matrix on failure
-	 * @see Matrix2D.isInvertible( )
+	 * @see .isInvertible
 	 */
-	Matrix2D.prototype.invert = function () {
-		var det = this.determinant();
+    Matrix2D.prototype.invert = function() {
+        var det = this.determinant();
 
-		// matrix is invertible if its determinant is non-zero
-		if (det !== 0) {
-			var old = {
-				a: this.a,
-				b: this.b,
-				c: this.c,
-				d: this.d,
-				e: this.e,
-				f: this.f
-			};
-			this.a = old.d / det;
-			this.b = -old.b / det;
-			this.c = -old.c / det;
-			this.d = old.a / det;
-			this.e = (old.c * old.f - old.e * old.d) / det;
-			this.f = (old.e * old.b - old.a * old.f) / det;
-		} // if
+        // matrix is invertible if its determinant is non-zero
+        if (det !== 0) {
+            var old = {
+                a: this.a,
+                b: this.b,
+                c: this.c,
+                d: this.d,
+                e: this.e,
+                f: this.f
+            };
+            this.a = old.d / det;
+            this.b = -old.b / det;
+            this.c = -old.c / det;
+            this.d = old.a / det;
+            this.e = (old.c * old.f - old.e * old.d) / det;
+            this.f = (old.e * old.b - old.a * old.f) / det;
+        } // if
 
-		return this;
-	} // invert( )
+        return this;
+    }; // invert
 
 	/**@
-	 * #.isIdentity( )
+	 * #.isIdentity
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Returns true if this matrix is the identity matrix
 	 *
@@ -9703,26 +10135,28 @@ Crafty.math.Matrix2D = (function () {
 	 * @sign public {Boolean} isIdentity();
 	 * @returns {Boolean}
 	 */
-	Matrix2D.prototype.isIdentity = function () {
-		return this.a === 1 && this.b === 0 && this.c === 0 && this.d === 1 && this.e === 0 && this.f === 0;
-	} // isIdentity( )
+    Matrix2D.prototype.isIdentity = function() {
+        return this.a === 1 && this.b === 0 && this.c === 0 && this.d === 1 && this.e === 0 && this.f === 0;
+    }; // isIdentity
 
 	/**@
-	 * #.isInvertible( )
+	 * #.isInvertible
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Determines is this matrix is invertible.
 	 *
 	 * @public
 	 * @sign public {Boolean} isInvertible();
 	 * @returns {Boolean} true if this matrix is invertible
-	 * @see Matrix2D.invert( )
+	 * @see .invert
 	 */
-	Matrix2D.prototype.isInvertible = function () {
-		return this.determinant() !== 0;
-	} // isInvertible( )
+    Matrix2D.prototype.isInvertible = function() {
+        return this.determinant() !== 0;
+    }; // isInvertible
 
 	/**@
-	 * #.preRotate( )
+	 * #.preRotate
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Applies a counter-clockwise pre-rotation to this matrix
 	 *
@@ -9731,22 +10165,23 @@ Crafty.math.Matrix2D = (function () {
 	 * @param {number} rads - angle to rotate in radians
 	 * @returns {Matrix2D} this matrix after pre-rotation
 	 */
-	Matrix2D.prototype.preRotate = function (rads) {
-		var nCos = Math.cos(rads);
-		var nSin = Math.sin(rads);
+    Matrix2D.prototype.preRotate = function(rads) {
+        var nCos = Math.cos(rads);
+        var nSin = Math.sin(rads);
 
-		var tmp = this.a;
-		this.a = nCos * tmp - nSin * this.b;
-		this.b = nSin * tmp + nCos * this.b;
-		tmp = this.c;
-		this.c = nCos * tmp - nSin * this.d;
-		this.d = nSin * tmp + nCos * this.d;
+        var tmp = this.a;
+        this.a = nCos * tmp - nSin * this.b;
+        this.b = nSin * tmp + nCos * this.b;
+        tmp = this.c;
+        this.c = nCos * tmp - nSin * this.d;
+        this.d = nSin * tmp + nCos * this.d;
 
-		return this;
-	} // preRotate( )
+        return this;
+    }; // preRotate
 
 	/**@
-	 * #.preScale( )
+	 * #.preScale
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Applies a pre-scaling to this matrix
 	 *
@@ -9756,20 +10191,21 @@ Crafty.math.Matrix2D = (function () {
 	 * @param {Number} [scalarY] scalarX is used if scalarY is undefined
 	 * @returns {Matrix2D} this after pre-scaling
 	 */
-	Matrix2D.prototype.preScale = function (scalarX, scalarY) {
-		if (scalarY === undefined)
-			scalarY = scalarX;
+    Matrix2D.prototype.preScale = function(scalarX, scalarY) {
+        if (scalarY === undefined)
+            scalarY = scalarX;
 
-		this.a *= scalarX;
-		this.b *= scalarY;
-		this.c *= scalarX;
-		this.d *= scalarY;
+        this.a *= scalarX;
+        this.b *= scalarY;
+        this.c *= scalarX;
+        this.d *= scalarY;
 
-		return this;
-	} // preScale( )
+        return this;
+    }; // preScale
 
 	/**@
-	 * #.preTranslate( )
+	 * #.preTranslate
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Applies a pre-translation to this matrix
 	 *
@@ -9780,20 +10216,21 @@ Crafty.math.Matrix2D = (function () {
 	 * @param {Number} dy
 	 * @returns {Matrix2D} this matrix after pre-translation
 	 */
-	Matrix2D.prototype.preTranslate = function (dx, dy) {
-		if (typeof dx === "number") {
-			this.e += dx;
-			this.f += dy;
-		} else {
-			this.e += dx.x;
-			this.f += dx.y;
-		} // else
+    Matrix2D.prototype.preTranslate = function(dx, dy) {
+        if (typeof dx === "number") {
+            this.e += dx;
+            this.f += dy;
+        } else {
+            this.e += dx.x;
+            this.f += dx.y;
+        } // else
 
-		return this;
-	} // preTranslate( )
+        return this;
+    }; // preTranslate
 
 	/**@
-	 * #.rotate( )
+	 * #.rotate
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Applies a counter-clockwise post-rotation to this matrix
 	 *
@@ -9802,25 +10239,26 @@ Crafty.math.Matrix2D = (function () {
 	 * @param {Number} rads - angle to rotate in radians
 	 * @returns {Matrix2D} this matrix after rotation
 	 */
-	Matrix2D.prototype.rotate = function (rads) {
-		var nCos = Math.cos(rads);
-		var nSin = Math.sin(rads);
+    Matrix2D.prototype.rotate = function(rads) {
+        var nCos = Math.cos(rads);
+        var nSin = Math.sin(rads);
 
-		var tmp = this.a;
-		this.a = nCos * tmp - nSin * this.b;
-		this.b = nSin * tmp + nCos * this.b;
-		tmp = this.c;
-		this.c = nCos * tmp - nSin * this.d;
-		this.d = nSin * tmp + nCos * this.d;
-		tmp = this.e;
-		this.e = nCos * tmp - nSin * this.f;
-		this.f = nSin * tmp + nCos * this.f;
+        var tmp = this.a;
+        this.a = nCos * tmp - nSin * this.b;
+        this.b = nSin * tmp + nCos * this.b;
+        tmp = this.c;
+        this.c = nCos * tmp - nSin * this.d;
+        this.d = nSin * tmp + nCos * this.d;
+        tmp = this.e;
+        this.e = nCos * tmp - nSin * this.f;
+        this.f = nSin * tmp + nCos * this.f;
 
-		return this;
-	} // rotate( )
+        return this;
+    }; // rotate
 
 	/**@
-	 * #.scale( )
+	 * #.scale
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Applies a post-scaling to this matrix
 	 *
@@ -9830,22 +10268,23 @@ Crafty.math.Matrix2D = (function () {
 	 * @param {Number} [scalarY] scalarX is used if scalarY is undefined
 	 * @returns {Matrix2D} this after post-scaling
 	 */
-	Matrix2D.prototype.scale = function (scalarX, scalarY) {
-		if (scalarY === undefined)
-			scalarY = scalarX;
+    Matrix2D.prototype.scale = function(scalarX, scalarY) {
+        if (scalarY === undefined)
+            scalarY = scalarX;
 
-		this.a *= scalarX;
-		this.b *= scalarY;
-		this.c *= scalarX;
-		this.d *= scalarY;
-		this.e *= scalarX;
-		this.f *= scalarY;
+        this.a *= scalarX;
+        this.b *= scalarY;
+        this.c *= scalarX;
+        this.d *= scalarY;
+        this.e *= scalarX;
+        this.f *= scalarY;
 
-		return this;
-	} // scale( )
+        return this;
+    }; // scale
 
 	/**@
-	 * #.setValues( )
+	 * #.setValues
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Sets the values of this matrix
 	 *
@@ -9860,28 +10299,29 @@ Crafty.math.Matrix2D = (function () {
 	 * @param {Number} f
 	 * @returns {Matrix2D} this matrix containing the new values
 	 */
-	Matrix2D.prototype.setValues = function (a, b, c, d, e, f) {
-		if (a instanceof Matrix2D) {
-			this.a = a.a;
-			this.b = a.b;
-			this.c = a.c;
-			this.d = a.d;
-			this.e = a.e;
-			this.f = a.f;
-		} else {
-			this.a = a;
-			this.b = b;
-			this.c = c;
-			this.d = d;
-			this.e = e;
-			this.f = f;
-		} // else
+    Matrix2D.prototype.setValues = function(a, b, c, d, e, f) {
+        if (a instanceof Matrix2D) {
+            this.a = a.a;
+            this.b = a.b;
+            this.c = a.c;
+            this.d = a.d;
+            this.e = a.e;
+            this.f = a.f;
+        } else {
+            this.a = a;
+            this.b = b;
+            this.c = c;
+            this.d = d;
+            this.e = e;
+            this.f = f;
+        } // else
 
-		return this;
-	} // setValues( )
+        return this;
+    }; // setValues
 
 	/**@
-	 * #.toString( )
+	 * #.toString
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Returns the string representation of this matrix.
 	 *
@@ -9889,13 +10329,14 @@ Crafty.math.Matrix2D = (function () {
 	 * @sign public {String} toString();
 	 * @returns {String}
 	 */
-	Matrix2D.prototype.toString = function () {
-		return "Matrix2D([" + this.a + ", " + this.c + ", " + this.e +
-			"] [" + this.b + ", " + this.d + ", " + this.f + "] [0, 0, 1])";
-	} // toString( )
+    Matrix2D.prototype.toString = function() {
+        return "Matrix2D([" + this.a + ", " + this.c + ", " + this.e +
+            "] [" + this.b + ", " + this.d + ", " + this.f + "] [0, 0, 1])";
+    }; // toString
 
 	/**@
-	 * #.translate( )
+	 * #.translate
+     * @comp Crafty.math.Matrix2D
 	 *
 	 * Applies a post-translation to this matrix
 	 *
@@ -9916,10 +10357,11 @@ Crafty.math.Matrix2D = (function () {
 		} // else
 
 		return this;
-	} // translate( )
+	} // translate
 
 	return Matrix2D;
 })();
+
 
 /**@
 * #Crafty Time
@@ -9986,5 +10428,6 @@ Crafty.c("Delay", {
 		});
 	}
 });
+
 
 });

@@ -31,8 +31,8 @@ var MOB = function(myId, locX, locY) {
 };
 
 var g_mobs = [];
-g_mobs.push(new MOB(g_idCount, 300, 300));
-g_mobs.push(new MOB(g_idCount, 300, 500));
+//g_mobs.push(new MOB(g_idCount, 300, 300));
+//g_mobs.push(new MOB(g_idCount, 300, 500));
 g_idCount++;
 
 	

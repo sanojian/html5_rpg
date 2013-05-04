@@ -17,9 +17,9 @@
 
 
 var RENDERING_MODE = 'DOM';
-var GAME_FONT = '"Arial"';//"Gorditas", cursive';
-var VIEW_WIDTH = 1024;
-var VIEW_HEIGHT = 768;
+var GAME_FONT = '16pt "Arial"';//"Gorditas", cursive';
+var VIEW_WIDTH = 800;
+var VIEW_HEIGHT = 600;
 var TILE_SIZE = 32;
 
 var GAME_CONSTANTS = {
@@ -32,6 +32,10 @@ var GAME_CONSTANTS = {
 	IMAGE_PLAYER: 0,
 	IMAGE_MOB: 1
 }
+
+var g_game = {
+
+};
 
 var g_players = [];
 var g_playerInfo = {};
@@ -46,6 +50,21 @@ var g_socket;
 	
 // Initialize everything when the window finishes loading
 window.addEventListener("load", function(event) {
+
+	$(document).keydown(function(evt) { 
+		var code = (evt.keyCode ? evt.keyCode : evt.which);
+		if (code == 13) {	// ENTER
+			if (g_game.bChatMode) {
+				g_socket.send('' + GAME_CONSTANTS.MSG_SPEECH + '|' + $('#txtChat').val());
+				$('#txtChat').val('').blur();
+			}
+			else {
+				$('#txtChat').focus();
+			}
+			g_game.bChatMode = !g_game.bChatMode;
+		}
+	});
+
 
 	Crafty.init(VIEW_WIDTH, VIEW_HEIGHT);
 	doCraftyInitialization();
@@ -65,41 +84,35 @@ window.addEventListener("load", function(event) {
 	}
 	
 	
-	var status = document.getElementById("status");
-	var url = document.getElementById("url");
+	g_game.status = g_hud.raphPaper.text(500, 40, 'Status: Not Connected').attr({ font: GAME_FONT} );
+	g_game.message = g_hud.raphPaper.text(500, 60, '').attr({ font: GAME_FONT} );
+	var url = "ws://localhost:8080";
 	var open = document.getElementById("open");
 	var close = document.getElementById("close");
-	var send = document.getElementById("send");
-	var text = document.getElementById("text");
-	var message = document.getElementById("message");
 
-	status.textContent = "Not Connected";
-	url.value = "ws://localhost:8080";
 	close.disabled = true;
-	send.disabled = true;
 
 	// Create a new connection when the Connect button is clicked
 	open.addEventListener("click", function(event) {
 		open.disabled = true;
-		g_socket = new WebSocket(url.value, "game-protocol");
+		g_socket = new WebSocket(url, "game-protocol");
 
         g_socket.addEventListener("open", function(event) {
 			close.disabled = false;
-			send.disabled = false;
-			status.textContent = "Connected";
+			g_game.status.attr({ text: "Status: Connected" });
         });
 
         // Display messages received from the server
         g_socket.addEventListener("message", function(event) {
 			console.log("Server Says: " + event.data);
-			message.textContent = "Server Says: " + event.data;
+			g_game.message.attr({ text: "Server Says: " + event.data });
 
 			var parts = event.data.split('|');
 			var type = parts[0];
 			var from = parts[1];
 			if (type == GAME_CONSTANTS.MSG_GET_ID) {
 				g_playerInfo.id = parts[2]
-				var player = Crafty.e('2D, ' + RENDERING_MODE + ', Player, myguy, Multiway')
+				var player = Crafty.e('2D, ' + RENDERING_MODE + ', Player, humanmale, Multiway')
 					.attr( { x: 200, y: 200, z: 100 } )
 					.multiway(2, {W: -90, S: 90, D: 0, A: 180})
 					.Player();
@@ -115,9 +128,9 @@ window.addEventListener("load", function(event) {
 					var dir = { x: parseFloat(parts[4]), y: parseFloat(parts[5]) };
 					var imgType = parseInt(parts[6])
 					
-					var mob = Crafty.e('2D, ' + RENDERING_MODE + ', MOB, ' + (imgType == GAME_CONSTANTS.IMAGE_PLAYER ? 'otherguy' : 'mobguy'))
+					var mob = Crafty.e('2D, ' + RENDERING_MODE + ', NPC, ' + (imgType == GAME_CONSTANTS.IMAGE_PLAYER ? 'orcfemale' : 'orcfemale'))
 						.attr( { x: x, y: y, z: 100 } )
-						.MOB();
+						.NPC();
 					mob.trigger('NewDirection', dir);
 					g_players[from] = { id: from, entity: mob };
 					console.log('added someone else...');
@@ -142,28 +155,22 @@ window.addEventListener("load", function(event) {
 
         // Display any errors that occur
         g_socket.addEventListener("error", function(event) {
-          message.textContent = "Error: " + event;
+          g_game.message.attr({ text: "Error: " + event });
         });
 
         g_socket.addEventListener("close", function(event) {
           open.disabled = false;
-          status.textContent = "Not Connected";
+          g_game.status.attr({ text: "Not Connected" });
         });
       });
 
       // Close the connection when the Disconnect button is clicked
       close.addEventListener("click", function(event) {
         close.disabled = true;
-        send.disabled = true;
-        message.textContent = "";
+        g_game.message.attr({ text:"" });
         g_socket.close();
       });
 
-      // Send text to the server when the Send button is clicked
-      send.addEventListener("click", function(event) {
-        g_socket.send('' + GAME_CONSTANTS.MSG_SPEECH + '|' + text.value);
-        text.value = "";
-      });
 });
 
 
@@ -173,38 +180,66 @@ function doCraftyInitialization() {
 	Crafty.c('Player', {
 
 		Player: function() {
-			this.requires("SpriteAnimation, Grid, Collision")
+			this.requires("MOB")
 			.bind("NewDirection", function (direction) {
 				g_socket.send('' + GAME_CONSTANTS.MSG_POSITION + '|' + this.x + '|' + this.y + '|' + direction.x + '|' + direction.y);
 			})
+			.MOB()
 			
 			return this;
 		},
-		showSpeech: function(text) {
-			g_hud.cursorSpeechBox = (g_hud.cursorSpeechBox + 1) % g_hud.speechBoxes.length;
-			var speechBox = g_hud.speechBoxes[g_hud.cursorSpeechBox];
-			speechBox[1].attr({ x: this.x + this.w/2, y: this.y - 30, text: text });
-			var bbox = speechBox[1].getBBox();
-			speechBox[0].attr({ x: bbox.x - 10, y: bbox.y - 10, width: bbox.width + 20, height: bbox.height + 20 });
-			speechBox.show();
-			setTimeout(function() { speechBox.hide(); }, 3000);
-			
-		}
 	});
 	
-	Crafty.c('MOB', {
-		speed: 1,
+	Crafty.c('NPC', {
+		mySpeed: 1,
 		direction: { x: 0, y: 0},
 		
-		MOB: function() {
-			this.requires("SpriteAnimation, Grid, Collision")
+		NPC: function() {
+			this.requires('MOB')
 			.bind("EnterFrame", function () {
 				if (this.direction.x || this.direction.y)
-					this.attr( { x: this.x + this.direction.x * this.speed, y: this.y + this.direction.y * this.speed } );
+					this.attr( { x: this.x + this.direction.x * this.mySpeed, y: this.y + this.direction.y * this.mySpeed } );
 			})
 			.bind("NewDirection", function (newDirection) {
 				this.direction = newDirection;
 			})
+			.MOB()
+			
+			return this;
+		}
+	});
+			
+	Crafty.c('MOB', {
+		
+		MOB: function() {
+			this.requires("SpriteAnimation, Grid, Collision")
+				.animate("walk_left", 0, 1, 8)
+				.animate("walk_right", 0, 3, 8)
+				.animate("walk_up", 0, 0, 8)
+				.animate("walk_down", 0, 2, 8)
+				.bind("NewDirection", function (direction) {
+					if (direction.x < 0) {
+						if (!this.isPlaying("walk_left"))
+							this.stop().animate("walk_left", 10, -1);
+					}
+					if (direction.x > 0) {
+						if (!this.isPlaying("walk_right"))
+							this.stop().animate("walk_right", 10, -1);
+					}
+					if (direction.y < 0) {
+						if (!this.isPlaying("walk_up"))
+							this.stop().animate("walk_up", 10, -1);
+					}
+					if (direction.y > 0) {
+						if (!this.isPlaying("walk_down"))
+							this.stop().animate("walk_down", 10, -1);
+					}
+					if (direction.x == 0 && direction.y == 0) {
+						this.stop();
+					}
+				})
+	
+			this.sprite(0, 2);
 			
 			return this;
 		},
@@ -232,17 +267,17 @@ function doCraftyInitialization() {
 			.text("Loading...")
 			.css({ "text-align": "center", "font-family": GAME_FONT, "font-size": "44px" });
 
-		Crafty.load([	'./images/critters.png'], function() {
-			Crafty.sprite(16, "./images/critters.png", {
-				myguy: [0, 0],
-				otherguy: [1, 0],
-				mobguy: [3, 0]
+		Crafty.load(['./images/male_walkcycle.png', './images/BODY_FEMALE_ORC_0.png'], function() {
+			Crafty.sprite(64, './images/male_walkcycle.png', {
+				humanmale: [0, 0]
 			});
-		
-			Crafty.scene("main");
-			
+			Crafty.sprite(64, './images/BODY_FEMALE_ORC_0.png', {
+				orcfemale: [0, 0]
+			});
+
 		});
 		
+		Crafty.scene("main");	
 	});	
 		
 	Crafty.scene("loading");	
@@ -266,13 +301,11 @@ jQuery.fn.aPosition = function() {
 		</script>
 	</head>
 <body>
-	Status: <span id="status"></span><br />
-	URL: <input id="url" /><br />
-	<input id="open" type="button" value="Connect" />&nbsp;
-	<input id="close" type="button" value="Disconnect" /><br />
-	<input id="send" type="button" value="Send" />&nbsp;
-	<input id="text" /><br />
-	<span id="message"></span>
+	<div id="divStatus">
+		<input id="open" type="button" value="Connect" />&nbsp;
+		<input id="close" type="button" value="Disconnect" /><br />
+		<input id="txtChat" /><br />
+	</div>
 
 	<div id="raphHolder" style="pointer-events: none;"></div>
 
