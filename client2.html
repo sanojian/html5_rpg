@@ -83,9 +83,11 @@ window.addEventListener("load", function(event) {
 		g_hud.speechBoxes.push(set);
 	}
 	
-	
-	g_game.status = g_hud.raphPaper.text(500, 40, 'Status: Not Connected').attr({ font: GAME_FONT} );
-	g_game.message = g_hud.raphPaper.text(500, 60, '').attr({ font: GAME_FONT} );
+	Crafty.scene("loading");	
+
+});
+
+function startComm() {	
 	var url = "ws://localhost:8080";
 	var open = document.getElementById("open");
 	var close = document.getElementById("close");
@@ -170,8 +172,9 @@ window.addEventListener("load", function(event) {
         g_game.message.attr({ text:"" });
         g_socket.close();
       });
+	  
 
-});
+};
 
 
 function doCraftyInitialization() {
@@ -197,8 +200,11 @@ function doCraftyInitialization() {
 		NPC: function() {
 			this.requires('MOB')
 			.bind("EnterFrame", function () {
-				if (this.direction.x || this.direction.y)
+				if (this.direction.x || this.direction.y) {
+					var from = { x: this.x, y: this.y };
 					this.attr( { x: this.x + this.direction.x * this.mySpeed, y: this.y + this.direction.y * this.mySpeed } );
+					this.trigger('Moved', from);
+				}
 			})
 			.bind("NewDirection", function (newDirection) {
 				this.direction = newDirection;
@@ -217,6 +223,7 @@ function doCraftyInitialization() {
 				.animate("walk_right", 0, 3, 8)
 				.animate("walk_up", 0, 0, 8)
 				.animate("walk_down", 0, 2, 8)
+				.collision(new Crafty.polygon([16, 48], [48, 48], [48, 62], [16, 62]))
 				.bind("NewDirection", function (direction) {
 					if (direction.x < 0) {
 						if (!this.isPlaying("walk_left"))
@@ -236,6 +243,14 @@ function doCraftyInitialization() {
 					}
 					if (direction.x == 0 && direction.y == 0) {
 						this.stop();
+					}
+				})
+				.bind('Moved', function(from) {
+					if (this.hit('solid')) {
+						this.attr({ x: from.x, y: from.y });
+					}
+					else {
+						this.attr({ z: (this.y + this.h) * 10 + 5 });
 					}
 				})
 	
@@ -259,29 +274,46 @@ function doCraftyInitialization() {
 	Crafty.scene("main", function () {
 		Crafty.background("#2F8136");		
 	
+		g_game.status = g_hud.raphPaper.text(500, 40, 'Status: Not Connected').attr({ font: GAME_FONT} );
+		g_game.message = g_hud.raphPaper.text(500, 60, '').attr({ font: GAME_FONT} );
+
+		Crafty.e('2D, ' + RENDERING_MODE + ', trunk_hardwood, solid, Collision')
+			.attr({ x: 400, y: 300, z: (300 + 72) * 10 + 2 })
+			.collision(new Crafty.polygon([36,40], [60, 40], [60, 72], [36, 72]));
+
+		Crafty.e('2D, ' + RENDERING_MODE + ', treetop_tall')
+			.attr({ x: 400, y: 300-64, z: (300 + 96) * 10 + 10 });
+		startComm();
+
 	});
 
 	Crafty.scene("loading", function () {
 		Crafty.background("#000");
-		Crafty.e("2D, DOM, Text").attr({ w: 800, h: 20, x: VIEW_WIDTH/2 - 400, y: VIEW_HEIGHT/2-160 })
+		Crafty.e('2D, ' + RENDERING_MODE + ', Text').attr({ w: 800, h: 20, x: VIEW_WIDTH/2 - 400, y: VIEW_HEIGHT/2-160 })
 			.text("Loading...")
 			.css({ "text-align": "center", "font-family": GAME_FONT, "font-size": "44px" });
 
-		Crafty.load(['./images/male_walkcycle.png', './images/BODY_FEMALE_ORC_0.png'], function() {
+		Crafty.load(['./images/male_walkcycle.png', './images/BODY_FEMALE_ORC_0.png', './images/trunk.png'], function() {
 			Crafty.sprite(64, './images/male_walkcycle.png', {
 				humanmale: [0, 0]
 			});
 			Crafty.sprite(64, './images/BODY_FEMALE_ORC_0.png', {
 				orcfemale: [0, 0]
 			});
+			Crafty.sprite(96, './images/trunk.png', {
+				trunk_hardwood: [0, 0],
+				trunk_pine: [1, 0]
+			});
+			Crafty.sprite(96, './images/treetop.png', {
+				treetop_tall: [0, 0],
+				treetop_short: [1, 0]
+			});
 
+			Crafty.scene("main");	
 		});
 		
-		Crafty.scene("main");	
 	});	
-		
-	Crafty.scene("loading");	
-		
+				
 }
 
 // fix for Webkit browsers too fast
