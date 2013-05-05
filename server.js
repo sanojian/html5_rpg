@@ -5,7 +5,34 @@ var g_connections = [];
 var g_dataQueue = [];
 var g_idCount = 0;
 
-var MOB = function(myId, locX, locY) {
+var i = 1;
+var g_game = {
+
+	MESSAGE_TYPES: {
+		CLIENT: {
+			GET_ENTITIES: i++,
+			GET_INVENTORY: i++,
+			INVENTORY_UPDATE: i++
+		},
+		SERVER: {
+			PRESENCE: i++,
+			STATUS: i++,
+			INVENTORY: i++,
+			EFFECTS: i++
+		},
+		SHARED: {
+			GET_ID: i++,
+			LOCATION: i++,
+			ACTION: i++,
+			SPELL: i++,
+			SPEECH: i++
+		}
+	}
+};
+i = undefined;
+
+
+/*var MOB = function(myId, locX, locY) {
 	var self = this;
 	self.id = myId;
 	self.originX = self.x = locX;
@@ -33,15 +60,12 @@ var MOB = function(myId, locX, locY) {
 var g_mobs = [];
 //g_mobs.push(new MOB(g_idCount, 300, 300));
 //g_mobs.push(new MOB(g_idCount, 300, 500));
+*/
 g_idCount++;
 
 	
 var GAME_CONSTANTS = {
-	MSG_GET_ID: 0,
-	MSG_PLAYER_INFO: 1,
 	MSG_DISCONNECT: 2,
-	MSG_SPEECH: 3,
-	MSG_POSITION: 4,
 	
 	IMAGE_PLAYER: 0,
 	IMAGE_MOB: 1
@@ -73,13 +97,13 @@ function originIsAllowed(origin) {
 }
 
 function doGameLoop() {
-	// copy data queue	
+	// copy data queue at this point in time
 	var snapShotQueue = g_dataQueue;
 	g_dataQueue = [];
 
-	for (var i=0;i<g_mobs.length;i++) {
+	/*for (var i=0;i<g_mobs.length;i++) {
 		g_mobs[i].move(50/4);	// 50FPS * 1/4 second
-	}
+	}*/
 	
 	for (var i=0;i<g_connections.length;i++) {
 		for (var j=0;j<snapShotQueue.length;j++) {
@@ -103,46 +127,73 @@ wsServer.on('request', function(request) {
 	var id = g_idCount++;
 	g_connections.push({ id: id, connection: connection });
 	
-	g_dataQueue.push('' + GAME_CONSTANTS.MSG_PLAYER_INFO + '|' + id + '|0|0|0|0|' + GAME_CONSTANTS.IMAGE_PLAYER);
+	// send id
+	connection.sendUTF(JSON.stringify({
+		type: g_game.MESSAGE_TYPES.SHARED.GET_ID,
+		entityId: id
+	}));
+
+	g_dataQueue.push(JSON.stringify( {
+		type: g_game.MESSAGE_TYPES.SERVER.PRESENCE,
+		entityId: id,
+		x: 0,
+		y: 0,
+		dirX: 0,
+		dirY: 0,
+		speed: 2
+	}));
 	
     console.log((new Date()) + ' Connection accepted.');
-	
-	// send id
-	connection.sendUTF('' + GAME_CONSTANTS.MSG_GET_ID + '|-1|' + id); 
 
-	for (var i=0;i<g_mobs.length;i++) {
+	/*for (var i=0;i<g_mobs.length;i++) {
 		// send all mobs to new player
 		connection.sendUTF('' + GAME_CONSTANTS.MSG_PLAYER_INFO + '|' + g_mobs[i].id + '|' + g_mobs[i].x + '|' + g_mobs[i].y 
 			+ '|' + g_mobs[i].direction.x + '|' + g_mobs[i].direction.y + '|' + g_mobs[i].speed + '|' + GAME_CONSTANTS.IMAGE_MOB);
-	}
+	}*/
 
-	for (var i=0;i<g_connections.length;i++) {
-		// send all current players to new player
-		connection.sendUTF('' + GAME_CONSTANTS.MSG_PLAYER_INFO + '|' + g_connections[i].id + '|0|0|0|0|' + GAME_CONSTANTS.IMAGE_PLAYER);
-	}
-	
     console.log('All data sent');
 	
-    connection.on('message', function(message) {
-        if (message.type === 'utf8') {
-            console.log('Received Message: ' + message.utf8Data);
-			var parts = message.utf8Data.split('|');
-			var type = parts[0];
-			if (type == GAME_CONSTANTS.MSG_SPEECH) {
-				var msg = parts[1];
-				g_dataQueue.push('' + GAME_CONSTANTS.MSG_SPEECH + '|' + id + '|' + msg);
+    connection.on('message', function(origMessage) {
+        if (origMessage.type === 'utf8') {
+            console.log('Received Message: ' + origMessage.utf8Data);
+			var message = JSON.parse(origMessage.utf8Data);
+			if (message.type == g_game.MESSAGE_TYPES.SHARED.SPEECH) {
+				g_dataQueue.push(JSON.stringify({
+					type: g_game.MESSAGE_TYPES.SHARED.SPEECH,
+					entityId: id,
+					text: message.text
+				}));
 			}
-			if (type == GAME_CONSTANTS.MSG_POSITION) {
-				var x = parts[1];
-				var y = parts[2];
-				var dirX = parts[3];
-				var dirY = parts[4];
-				g_dataQueue.push('' + GAME_CONSTANTS.MSG_POSITION + '|' + id + '|' + x + '|' + y + '|' + dirX + '|' + dirY + '|2');
+			else if (message.type == g_game.MESSAGE_TYPES.SHARED.LOCATION) {
+				g_dataQueue.push(JSON.stringify({
+					type: g_game.MESSAGE_TYPES.SHARED.LOCATION,
+					entityId: id,
+					x: message.x,
+					y: message.y,
+					dirX: message.dirX,
+					dirY: message.dirY,
+					speed: message.speed
+				}));
+			}
+			else if (message.type == g_game.MESSAGE_TYPES.CLIENT.GET_ENTITIES) {
+				// send all current players to new player
+				for (var i=0;i<g_connections.length;i++) {
+					if (g_connections[i].id != id) {
+						connection.sendUTF(JSON.stringify({
+							type: g_game.MESSAGE_TYPES.SERVER.PRESENCE,
+							entityId: g_connections[i].id,
+							x: 0,
+							y: 0,
+							dirX: 0,
+							dirY: 0
+						}));
+					}
+				}
 			}
         }
-        else if (message.type === 'binary') {
-            console.log('Received Binary Message of ' + message.binaryData.length + ' bytes');
-            connection.sendBytes(message.binaryData);
+        else if (origMessage.type === 'binary') {
+            console.log('Received Binary Message of ' + origMessage.binaryData.length + ' bytes');
+            connection.sendBytes(origMessage.binaryData);
         }
     });
     connection.on('close', function(reasonCode, description) {

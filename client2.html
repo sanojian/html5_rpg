@@ -16,26 +16,43 @@
 "use strict";
 
 
-var RENDERING_MODE = 'DOM';
+var RENDERING_MODE = 'DOM';//'Canvas';
 var GAME_FONT = '16pt "Arial"';//"Gorditas", cursive';
 var VIEW_WIDTH = 800;
 var VIEW_HEIGHT = 600;
-var TILE_SIZE = 32;
 
 var GAME_CONSTANTS = {
-	MSG_GET_ID: 0,
-	MSG_PLAYER_INFO: 1,
 	MSG_DISCONNECT: 2,
-	MSG_SPEECH: 3,
-	MSG_POSITION: 4,
 	
 	IMAGE_PLAYER: 0,
 	IMAGE_MOB: 1
 }
 
+var i = 1;
 var g_game = {
 
+	MESSAGE_TYPES: {
+		CLIENT: {
+			GET_ENTITIES: i++,
+			GET_INVENTORY: i++,
+			INVENTORY_UPDATE: i++
+		},
+		SERVER: {
+			PRESENCE: i++,
+			STATUS: i++,
+			INVENTORY: i++,
+			EFFECTS: i++
+		},
+		SHARED: {
+			GET_ID: i++,
+			LOCATION: i++,
+			ACTION: i++,
+			SPELL: i++,
+			SPEECH: i++
+		}
+	}
 };
+i = undefined;
 
 var g_players = [];
 var g_playerInfo = {};
@@ -55,7 +72,10 @@ window.addEventListener("load", function(event) {
 		var code = (evt.keyCode ? evt.keyCode : evt.which);
 		if (code == 13) {	// ENTER
 			if (g_game.bChatMode) {
-				g_socket.send('' + GAME_CONSTANTS.MSG_SPEECH + '|' + $('#txtChat').val());
+				g_socket.send(JSON.stringify({
+					type: g_game.MESSAGE_TYPES.SHARED.SPEECH,
+					text: $('#txtChat').val()
+				}));
 				$('#txtChat').val('').blur();
 			}
 			else {
@@ -102,6 +122,10 @@ function startComm() {
         g_socket.addEventListener("open", function(event) {
 			close.disabled = false;
 			g_game.status.attr({ text: "Status: Connected" });
+			// get player list
+			g_socket.send(JSON.stringify({
+				type: g_game.MESSAGE_TYPES.CLIENT.GET_ENTITIES
+			}));
         });
 
         // Display messages received from the server
@@ -109,48 +133,41 @@ function startComm() {
 			console.log("Server Says: " + event.data);
 			g_game.message.attr({ text: "Server Says: " + event.data });
 
-			var parts = event.data.split('|');
-			var type = parts[0];
-			var from = parts[1];
-			if (type == GAME_CONSTANTS.MSG_GET_ID) {
-				g_playerInfo.id = parts[2]
+			var message = $.parseJSON(event.data);
+			
+			if (message.type == g_game.MESSAGE_TYPES.SHARED.GET_ID) {
+				g_playerInfo.id = message.entityId;
 				var player = Crafty.e('2D, ' + RENDERING_MODE + ', Player, humanmale, Multiway')
 					.attr( { x: 200, y: 200, z: 100 } )
 					.multiway(2, {W: -90, S: 90, D: 0, A: 180})
 					.Player();
 
-				g_players[g_playerInfo.id] = { id: msg, name: 'dunno', entity: player };
+				g_players[g_playerInfo.id] = { id: message.entityId, name: 'dunno', entity: player };
 				console.log('added me...');
 					
 			}
-			else if (type == GAME_CONSTANTS.MSG_PLAYER_INFO) {
-				if (from != g_playerInfo.id) {
-					var x = parseFloat(parts[2]);
-					var y = parseFloat(parts[3]);
-					var dir = { x: parseFloat(parts[4]), y: parseFloat(parts[5]) };
-					var imgType = parseInt(parts[6])
-					
-					var mob = Crafty.e('2D, ' + RENDERING_MODE + ', NPC, ' + (imgType == GAME_CONSTANTS.IMAGE_PLAYER ? 'orcfemale' : 'orcfemale'))
-						.attr( { x: x, y: y, z: 100 } )
-						.NPC();
-					mob.trigger('NewDirection', dir);
-					g_players[from] = { id: from, entity: mob };
-					console.log('added someone else...');
+			else if (message.type == g_game.MESSAGE_TYPES.SERVER.PRESENCE) {
+				if (message.entityId != g_playerInfo.id) {
+					if (!g_players[message.entityId]) {
+						var mob = Crafty.e('2D, ' + RENDERING_MODE + ', NPC, orcfemale')
+							.attr( { x: message.x, y: message.y, z: (message.y + 96) * 10 + 5 } )
+							.NPC();
+						mob.trigger('NewDirection', { x: message.dirX, y: message.dirY });
+						g_players[message.entityId] = { id: message.entityId, entity: mob };
+						console.log('added someone else...');
+					}
 				}
 			}
-			else if (type == GAME_CONSTANTS.MSG_SPEECH) {
-				var msg = parts[2];
-				g_players[from].entity.showSpeech(msg);
+			else if (message.type == g_game.MESSAGE_TYPES.SHARED.SPEECH) {
+				g_players[message.entityId].entity.showSpeech(message.text);
 			}
-			else if (type == GAME_CONSTANTS.MSG_POSITION) {
-				if (from != g_playerInfo.id) {
-					var x = parseFloat(parts[2]);
-					var y = parseFloat(parts[3]);
-					var dir = { x: parseFloat(parts[4]), y: parseFloat(parts[5]) };
-					var speed = parseFloat(parts[6]);
-					
-					g_players[from].entity.attr( { x: x, y: y, speed: speed } );
-					g_players[from].entity.trigger('NewDirection', dir);
+			else if (message.type == g_game.MESSAGE_TYPES.SHARED.LOCATION) {
+				if (message.entityId != g_playerInfo.id) {
+					if (!g_players[message.entityId]) {
+						return;
+					}
+					g_players[message.entityId].entity.attr( { x: message.x, y: message.y, speed: message.speed } );
+					g_players[message.entityId].entity.trigger('NewDirection', { x: message.dirX, y: message.dirY });
 				}
 			}
         });
@@ -185,7 +202,14 @@ function doCraftyInitialization() {
 		Player: function() {
 			this.requires("MOB")
 			.bind("NewDirection", function (direction) {
-				g_socket.send('' + GAME_CONSTANTS.MSG_POSITION + '|' + this.x + '|' + this.y + '|' + direction.x + '|' + direction.y);
+				g_socket.send(JSON.stringify({
+					type: g_game.MESSAGE_TYPES.SHARED.LOCATION,
+					x: this.x,
+					y: this.y,
+					dirX: direction.x,
+					dirY: direction.y,
+					speed: this.speed
+				}));
 			})
 			.MOB()
 			
@@ -289,10 +313,12 @@ function doCraftyInitialization() {
 
 	Crafty.scene("loading", function () {
 		Crafty.background("#000");
+		try {
 		Crafty.e('2D, ' + RENDERING_MODE + ', Text').attr({ w: 800, h: 20, x: VIEW_WIDTH/2 - 400, y: VIEW_HEIGHT/2-160 })
 			.text("Loading...")
 			.css({ "text-align": "center", "font-family": GAME_FONT, "font-size": "44px" });
-
+		} catch (ex) {;}
+		
 		Crafty.load(['./images/male_walkcycle.png', './images/BODY_FEMALE_ORC_0.png', './images/trunk.png'], function() {
 			Crafty.sprite(64, './images/male_walkcycle.png', {
 				humanmale: [0, 0]
